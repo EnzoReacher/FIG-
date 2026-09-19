@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Forge Gym Health",
+    "slug": "forge-gym-health",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "forge-gym-health",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.forgegymhealth.app"
+    }
+  }
+}

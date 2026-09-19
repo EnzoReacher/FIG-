@@ -1,0 +1,2 @@
+-- Milestone 0 foundation migration.
+-- Application tables are intentionally deferred to later milestones.
