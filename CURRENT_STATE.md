@@ -8,13 +8,15 @@
 - Added Fastify API shell with an independent `/health` endpoint.
 - Added Expo Router mobile shell and verified its Expo configuration.
 - Added local PostgreSQL Docker Compose configuration.
-- Added Drizzle migration tooling with an intentionally empty foundation migration.
+- Added Drizzle migration tooling and the first application migration for users, profiles, and nutrition goals.
+- Added a deterministic seeded development user and development authentication adapter.
+- Added the authenticated `GET /v1/profile` foundation route and repository boundary.
 - Added project documentation and ADR decision records.
-- Confirmed the database contains no application relations after migration.
+- Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added the root workspace and tooling files, Docker and environment configuration, API shell and migration files, Expo mobile shell, package placeholders, project documentation, ADRs, and `pnpm-lock.yaml`. Added `.prettierignore` and pnpm build approval configuration. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migration, seed, database client, development auth, profile repository/routes, API tests, and the API migration script. No nutrition logging, step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
 
 ## Verification
 
@@ -31,11 +33,17 @@ All commands below passed:
 - `pnpm format:check` — passed.
 - `pnpm --filter @forge/mobile exec expo config --json` — passed; Android package resolved as `com.forgegymhealth.app`.
 - API process smoke test with `curl http://localhost:3000/health` — passed with `{\"status\":\"ok\"}`.
+- `pnpm --filter @forge/api db:generate` — passed; generated the users/profiles/nutrition-goals migration.
+- `pnpm db:migrate` — passed; migration and deterministic development-user seed applied.
+- PostgreSQL inspection — passed; exactly `users`, `profiles`, and `nutrition_goals` exist, with one seeded user, profile, and goal.
+- `pnpm test` — passed; 2 API tests, including health and development profile access.
+- `pnpm typecheck` — passed.
+- `pnpm lint` — passed.
+- `pnpm format:check` — passed.
 
 ## Blockers
 
 - Android SDK, Java, adb, and emulator tooling are not installed in the current environment, so real-device mobile verification is not available yet.
-- Local commit is pending because Git has no configured author name or email; no global Git configuration was changed.
 
 ## Risks
 
@@ -44,4 +52,4 @@ All commands below passed:
 
 ## Next task
 
-Add the API/database foundation in a separate bounded task: seeded development user, development auth adapter, and the first application schema. Do not add steps or food-analysis tables outside their approved milestones.
+Implement the Milestone 1 profile and nutrition-goal setup flow, including validated profile updates and calorie-target explanation/override behavior. Do not add meal logging until that bounded task is approved.
