@@ -63,11 +63,21 @@ All commands below passed:
 ## Blockers
 
 - Android SDK, Java, adb, and emulator tooling are not installed in the current environment, so real-device mobile verification is not available yet.
+- Expo camera/gallery packages are not installed; analysis currently accepts a temporary image URI rather than device capture.
 
 ## Risks
 
 - Expo Pedometer behavior and permission handling require Android-device verification in Milestone 3.
 - Food-photo nutrition remains an estimate and will require explicit confidence, assumptions, editing, and confirmation in later milestones.
+- The mock step source is wired for development; no physical-device Pedometer adapter has been verified.
+- Temporary image deletion is represented by the confirmation contract; durable object-storage cleanup is not implemented.
+
+## Features still incomplete
+
+- Real Expo camera/gallery selection and temporary binary upload/deletion.
+- Full meal detail edit UI and calorie-target display from the goal endpoint.
+- Expo Pedometer adapter and foreground/resume lifecycle wiring.
+- Production authentication, external food-analysis provider, and provider secrets.
 
 ## Next task
 
