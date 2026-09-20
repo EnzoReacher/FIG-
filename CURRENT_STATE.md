@@ -10,13 +10,14 @@
 - Added local PostgreSQL Docker Compose configuration.
 - Added Drizzle migration tooling and the first application migration for users, profiles, and nutrition goals.
 - Added a deterministic seeded development user and development authentication adapter.
-- Added the authenticated `GET /v1/profile` foundation route and repository boundary.
+- Added authenticated `GET /v1/profile` and `PATCH /v1/profile` routes with Zod-validated profile updates.
+- Added `GET /v1/nutrition-goal` and `PATCH /v1/nutrition-goal`, with Mifflin–St Jeor calculations, macro defaults, and manual calorie-target overrides.
 - Added project documentation and ADR decision records.
 - Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added or updated API database schema, migration, seed, database client, development auth, profile repository/routes, API tests, and the API migration script. No nutrition logging, step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migration, seed, database client, development auth, profile repository/routes, validation, API tests, and the API migration script. No meal logging, step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
 
 ## Verification
 
@@ -36,10 +37,11 @@ All commands below passed:
 - `pnpm --filter @forge/api db:generate` — passed; generated the users/profiles/nutrition-goals migration.
 - `pnpm db:migrate` — passed; migration and deterministic development-user seed applied.
 - PostgreSQL inspection — passed; exactly `users`, `profiles`, and `nutrition_goals` exist, with one seeded user, profile, and goal.
-- `pnpm test` — passed; 2 API tests, including health and development profile access.
+- `pnpm test` — passed; 6 API tests covering health, valid profile updates, invalid input, calculated/manual goals, and missing users.
 - `pnpm typecheck` — passed.
 - `pnpm lint` — passed.
 - `pnpm format:check` — passed.
+- `pnpm install --frozen-lockfile` — passed after adding the Zod dependency.
 
 ## Blockers
 

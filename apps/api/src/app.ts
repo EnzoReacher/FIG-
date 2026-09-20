@@ -1,10 +1,11 @@
 import Fastify from 'fastify';
 import { DevelopmentAuthAdapter } from './auth/development-auth-adapter.js';
+import type { AuthAdapter } from './auth/auth-adapter.js';
 import { registerProfileRoutes } from './profile/profile-routes.js';
 import type { ProfileRepository } from './profile/profile-repository.js';
 
 export function buildApp(dependencies?: {
-  auth?: DevelopmentAuthAdapter;
+  auth?: AuthAdapter;
   profiles?: ProfileRepository;
 }) {
   const app = Fastify({ logger: true });

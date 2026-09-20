@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { nutritionGoals, profiles } from '../db/schema.js';
 
@@ -9,6 +9,14 @@ export interface ProfileView {
 
 export interface ProfileRepository {
   get(userId: string): Promise<ProfileView | null>;
+  updateProfile(
+    userId: string,
+    values: Partial<typeof profiles.$inferInsert>,
+  ): Promise<ProfileView | null>;
+  updateGoal(
+    userId: string,
+    values: typeof nutritionGoals.$inferInsert,
+  ): Promise<ProfileView | null>;
 }
 
 export function createProfileRepository(db: Database): ProfileRepository {
@@ -33,15 +41,50 @@ export function createProfileRepository(db: Database): ProfileRepository {
 
       return { profile, goal: goal ?? null };
     },
+    async updateProfile(userId, values) {
+      const [profile] = await db
+        .update(profiles)
+        .set({ ...values, updatedAt: new Date() })
+        .where(eq(profiles.userId, userId))
+        .returning();
+      return profile ? this.get(userId) : null;
+    },
+    async updateGoal(userId, values) {
+      const existing = await this.get(userId);
+      if (!existing) return null;
+      const [goal] = await db.insert(nutritionGoals).values(values).returning();
+      return goal ? { profile: existing.profile, goal } : null;
+    },
   };
 }
 
 export function createInMemoryProfileRepository(
   view: ProfileView,
 ): ProfileRepository {
+  let current = view;
   return {
     async get(userId) {
-      return view.profile.userId === userId ? view : null;
+      return current.profile.userId === userId ? current : null;
+    },
+    async updateProfile(userId, values) {
+      if (current.profile.userId !== userId) return null;
+      current = {
+        ...current,
+        profile: { ...current.profile, ...values, updatedAt: new Date() },
+      };
+      return current;
+    },
+    async updateGoal(userId, values) {
+      if (current.profile.userId !== userId) return null;
+      current = {
+        ...current,
+        goal: {
+          ...values,
+          id: values.id ?? 'in-memory-goal',
+          createdAt: new Date(),
+        } as typeof current.goal,
+      };
+      return current;
     },
   };
 }
