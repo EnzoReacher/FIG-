@@ -15,12 +15,13 @@
 - Added nutrition foods, meals, meal items, fixed-point hundredths storage, timezone-aware daily totals, validated CRUD routes, and in-memory repository coverage.
 - Added a functional Expo Today dashboard with API-backed meals, calorie/macro totals, manual food entry, delete action, loading, retry, and unavailable API states.
 - Added daily steps persistence, StepSource and mock source interfaces, idempotent synchronization routes, permission/unavailable responses, and dashboard step states.
+- Added provider-isolated food analysis API with strict Zod result validation, deterministic mock fixtures, confidence/assumption fields, editable mobile review, explicit confirmation, and manual fallback.
 - Added project documentation and ADR decision records.
 - Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added or updated API database schema, migrations, nutrition and step repositories/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migrations, nutrition, step, and analysis repositories/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No real AI provider, provider secret, or Forge-Gym-V2 file was added or changed.
 
 ## Verification
 
@@ -57,6 +58,7 @@ All commands below passed:
 - `pnpm --filter @forge/api db:generate` — passed for daily steps migration.
 - `pnpm db:migrate` — passed.
 - `pnpm test` — passed; 9 tests.
+- `pnpm test` — passed; 11 tests including malformed-analysis and low-confidence fixture coverage.
 
 ## Blockers
 
@@ -69,4 +71,4 @@ All commands below passed:
 
 ## Next task
 
-Implement Milestone 4 provider-isolated food-photo analysis foundation with explicit confirmation.
+Next task: replace the temporary image URI control with Expo camera/gallery selection and add upload retention tests; do not add a real AI provider without an explicit provider decision.
