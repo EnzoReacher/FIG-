@@ -51,20 +51,33 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export default function Index() {
   const [today, setToday] = useState<Today | null>(null);
   const [foods, setFoods] = useState<Food[]>([]);
+  const [steps, setSteps] = useState<{
+    steps: number;
+    permission: string;
+  } | null>(null);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
+  const [imageUrl, setImageUrl] = useState('temporary://salad');
+  const [analysis, setAnalysis] = useState<{
+    name: string;
+    calories: number;
+    confidence: number;
+    assumptions: string[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [day, foodList] = await Promise.all([
+      const [day, foodList, stepState] = await Promise.all([
         api<Today>('/v1/meals'),
         api<{ foods: Food[] }>('/v1/foods'),
+        api<{ steps: number; permission: string }>('/v1/steps'),
       ]);
       setToday(day);
       setFoods(foodList.foods);
+      setSteps(stepState);
     } catch {
       setError('Unable to reach the API. Check your connection and retry.');
     } finally {
@@ -104,6 +117,39 @@ export default function Index() {
       );
     }
   };
+  const analyze = async () => {
+    try {
+      const result = await api<{ result: typeof analysis }>(
+        '/v1/food-analysis',
+        { method: 'POST', body: JSON.stringify({ imageUrl }) },
+      );
+      setAnalysis(result.result);
+    } catch {
+      setError('Photo analysis failed. You can add the food manually.');
+    }
+  };
+  const confirmAnalysis = async () => {
+    if (!analysis) return;
+    try {
+      await api('/v1/food-analysis/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          imageUrl,
+          result: {
+            ...analysis,
+            proteinGrams: 12,
+            carbohydrateGrams: 34,
+            fatGrams: 14,
+          },
+          eatenAt: new Date().toISOString(),
+        }),
+      });
+      setAnalysis(null);
+      await load();
+    } catch {
+      setError('The analyzed food could not be added.');
+    }
+  };
   return (
     <ScrollView
       contentContainerStyle={styles.container}
@@ -125,6 +171,14 @@ export default function Index() {
               {Math.round(today.totals.calories)} kcal
             </Text>
             <Text>of your daily target</Text>
+            <Text style={styles.steps}>
+              Steps today: {steps?.steps ?? 0}
+              {steps?.permission === 'denied'
+                ? ' (permission denied)'
+                : steps?.permission === 'unavailable'
+                  ? ' (unavailable)'
+                  : ''}
+            </Text>
             <View style={styles.card}>
               <Text>Protein {today.totals.proteinGrams.toFixed(1)} g</Text>
               <Text>Carbs {today.totals.carbohydrateGrams.toFixed(1)} g</Text>
@@ -177,6 +231,26 @@ export default function Index() {
           Saved foods: {foods.map((food) => food.name).join(', ')}
         </Text>
       )}
+      <Text style={styles.heading}>Photo analysis (review before adding)</Text>
+      <TextInput
+        value={imageUrl}
+        onChangeText={setImageUrl}
+        placeholder="Image URI"
+        style={styles.input}
+      />
+      <Button title="Analyze image" onPress={analyze} />
+      {analysis && (
+        <View style={styles.card}>
+          <Text style={styles.mealName}>{analysis.name}</Text>
+          <Text>
+            {analysis.calories} kcal · confidence{' '}
+            {(analysis.confidence * 100).toFixed(0)}%
+          </Text>
+          <Text>{analysis.assumptions.join(' ')}</Text>
+          <Button title="Confirm and add" onPress={confirmAnalysis} />
+          <Button title="Discard" onPress={() => setAnalysis(null)} />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -188,6 +262,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 16 },
   calories: { fontSize: 34, fontWeight: '700' },
+  steps: { fontSize: 17, marginTop: 12 },
   heading: { fontSize: 20, fontWeight: '700', marginBottom: 8, marginTop: 24 },
   card: {
     backgroundColor: '#eef5ef',

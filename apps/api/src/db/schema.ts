@@ -96,6 +96,18 @@ export const mealItems = pgTable('meal_items', {
   fatHundredths: integer('fat_hundredths').notNull(),
 });
 
+export const dailySteps = pgTable('daily_steps', {
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  day: date('day').notNull(),
+  steps: integer('steps').notNull(),
+  source: varchar('source', { length: 16 }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const schema = {
   users,
   profiles,
@@ -103,6 +115,7 @@ export const schema = {
   foods,
   meals,
   mealItems,
+  dailySteps,
 };
 
 export type User = typeof users.$inferSelect;
@@ -111,3 +124,4 @@ export type NutritionGoal = typeof nutritionGoals.$inferSelect;
 export type Food = typeof foods.$inferSelect;
 export type Meal = typeof meals.$inferSelect;
 export type MealItem = typeof mealItems.$inferSelect;
+export type DailySteps = typeof dailySteps.$inferSelect;

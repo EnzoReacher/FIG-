@@ -4,12 +4,18 @@ import { buildApp } from './app.js';
 import { createDatabase } from './db/client.js';
 import { createProfileRepository } from './profile/profile-repository.js';
 import { createNutritionRepository } from './nutrition/nutrition-repository.js';
+import { createStepRepository } from './steps/step-repository.js';
+import { MockStepSource } from './steps/step-source.js';
+import { MockFoodAnalysisProvider } from './analysis/analysis-provider.js';
 
 const database = createDatabase();
 const app = buildApp({
   auth: new DevelopmentAuthAdapter(),
   profiles: createProfileRepository(database.db),
   nutrition: createNutritionRepository(database.db),
+  steps: createStepRepository(database.db),
+  stepSource: new MockStepSource(),
+  analysis: new MockFoodAnalysisProvider(),
 });
 const port = Number(process.env.API_PORT ?? 3000);
 

@@ -14,12 +14,13 @@
 - Added `GET /v1/nutrition-goal` and `PATCH /v1/nutrition-goal`, with Mifflin–St Jeor calculations, macro defaults, and manual calorie-target overrides.
 - Added nutrition foods, meals, meal items, fixed-point hundredths storage, timezone-aware daily totals, validated CRUD routes, and in-memory repository coverage.
 - Added a functional Expo Today dashboard with API-backed meals, calorie/macro totals, manual food entry, delete action, loading, retry, and unavailable API states.
+- Added daily steps persistence, StepSource and mock source interfaces, idempotent synchronization routes, permission/unavailable responses, and dashboard step states.
 - Added project documentation and ADR decision records.
 - Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added or updated API database schema, migration, nutrition repository/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migrations, nutrition and step repositories/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No Forge-Gym-V2 files were changed.
 
 ## Verification
 
@@ -53,6 +54,9 @@ All commands below passed:
 - `git diff --check` — passed.
 - `pnpm --filter @forge/mobile typecheck` — passed.
 - `pnpm --filter @forge/mobile lint` — passed.
+- `pnpm --filter @forge/api db:generate` — passed for daily steps migration.
+- `pnpm db:migrate` — passed.
+- `pnpm test` — passed; 9 tests.
 
 ## Blockers
 
@@ -65,4 +69,4 @@ All commands below passed:
 
 ## Next task
 
-Implement Milestone 3 step source abstraction, daily persistence, synchronization, and dashboard states.
+Implement Milestone 4 provider-isolated food-photo analysis foundation with explicit confirmation.
