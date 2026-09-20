@@ -12,12 +12,13 @@
 - Added a deterministic seeded development user and development authentication adapter.
 - Added authenticated `GET /v1/profile` and `PATCH /v1/profile` routes with Zod-validated profile updates.
 - Added `GET /v1/nutrition-goal` and `PATCH /v1/nutrition-goal`, with Mifflin–St Jeor calculations, macro defaults, and manual calorie-target overrides.
+- Added nutrition foods, meals, meal items, fixed-point hundredths storage, timezone-aware daily totals, validated CRUD routes, and in-memory repository coverage.
 - Added project documentation and ADR decision records.
 - Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added or updated API database schema, migration, seed, database client, development auth, profile repository/routes, validation, API tests, and the API migration script. No meal logging, step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migration, nutrition repository/routes/tests, profile repository/routes, validation, API tests, and the API migration script. No step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
 
 ## Verification
 
@@ -42,6 +43,13 @@ All commands below passed:
 - `pnpm lint` — passed.
 - `pnpm format:check` — passed.
 - `pnpm install --frozen-lockfile` — passed after adding the Zod dependency.
+- `docker compose up -d --wait postgres` — passed.
+- `pnpm db:migrate` — passed; nutrition tables migration applied.
+- `pnpm test` — passed; 8 API/repository tests.
+- `pnpm typecheck` — passed.
+- `pnpm lint` — passed.
+- `pnpm format:check` — passed.
+- `git diff --check` — passed.
 
 ## Blockers
 
@@ -49,9 +57,9 @@ All commands below passed:
 
 ## Risks
 
-- Expo Pedometer behavior and permission handling require Android-device verification in Milestone 2.
+- Expo Pedometer behavior and permission handling require Android-device verification in Milestone 3.
 - Food-photo nutrition remains an estimate and will require explicit confidence, assumptions, editing, and confirmation in later milestones.
 
 ## Next task
 
-Implement the Milestone 1 profile and nutrition-goal setup flow, including validated profile updates and calorie-target explanation/override behavior. Do not add meal logging until that bounded task is approved.
+Implement Milestone 2 mobile nutrition vertical slice against the seeded development API.

@@ -54,8 +54,60 @@ export const nutritionGoals = pgTable('nutrition_goals', {
     .notNull(),
 });
 
-export const schema = { users, profiles, nutritionGoals };
+export const foods = pgTable('foods', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 160 }).notNull(),
+  caloriesHundredths: integer('calories_hundredths').notNull(),
+  proteinHundredths: integer('protein_hundredths').notNull(),
+  carbohydrateHundredths: integer('carbohydrate_hundredths').notNull(),
+  fatHundredths: integer('fat_hundredths').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const meals = pgTable('meals', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 80 }).notNull(),
+  eatenAt: timestamp('eaten_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const mealItems = pgTable('meal_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  mealId: uuid('meal_id')
+    .notNull()
+    .references(() => meals.id, { onDelete: 'cascade' }),
+  foodId: uuid('food_id')
+    .notNull()
+    .references(() => foods.id),
+  quantityHundredths: integer('quantity_hundredths').notNull(),
+  caloriesHundredths: integer('calories_hundredths').notNull(),
+  proteinHundredths: integer('protein_hundredths').notNull(),
+  carbohydrateHundredths: integer('carbohydrate_hundredths').notNull(),
+  fatHundredths: integer('fat_hundredths').notNull(),
+});
+
+export const schema = {
+  users,
+  profiles,
+  nutritionGoals,
+  foods,
+  meals,
+  mealItems,
+};
 
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type NutritionGoal = typeof nutritionGoals.$inferSelect;
+export type Food = typeof foods.$inferSelect;
+export type Meal = typeof meals.$inferSelect;
+export type MealItem = typeof mealItems.$inferSelect;

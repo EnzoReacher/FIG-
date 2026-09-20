@@ -15,6 +15,13 @@
       "when": 1789833160527,
       "tag": "0001_thin_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789919125876,
+      "tag": "0002_quiet_sue_storm",
+      "breakpoints": true
     }
   ]
 }
