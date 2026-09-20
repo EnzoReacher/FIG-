@@ -13,12 +13,13 @@
 - Added authenticated `GET /v1/profile` and `PATCH /v1/profile` routes with Zod-validated profile updates.
 - Added `GET /v1/nutrition-goal` and `PATCH /v1/nutrition-goal`, with Mifflin–St Jeor calculations, macro defaults, and manual calorie-target overrides.
 - Added nutrition foods, meals, meal items, fixed-point hundredths storage, timezone-aware daily totals, validated CRUD routes, and in-memory repository coverage.
+- Added a functional Expo Today dashboard with API-backed meals, calorie/macro totals, manual food entry, delete action, loading, retry, and unavailable API states.
 - Added project documentation and ADR decision records.
 - Confirmed the database contains exactly the three approved foundation tables after migration.
 
 ## Files changed
 
-Added or updated API database schema, migration, nutrition repository/routes/tests, profile repository/routes, validation, API tests, and the API migration script. No step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
+Added or updated API database schema, migration, nutrition repository/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No step synchronization, camera, or food-analysis code was added. No Forge-Gym-V2 files were changed.
 
 ## Verification
 
@@ -50,6 +51,8 @@ All commands below passed:
 - `pnpm lint` — passed.
 - `pnpm format:check` — passed.
 - `git diff --check` — passed.
+- `pnpm --filter @forge/mobile typecheck` — passed.
+- `pnpm --filter @forge/mobile lint` — passed.
 
 ## Blockers
 
@@ -62,4 +65,4 @@ All commands below passed:
 
 ## Next task
 
-Implement Milestone 2 mobile nutrition vertical slice against the seeded development API.
+Implement Milestone 3 step source abstraction, daily persistence, synchronization, and dashboard states.
