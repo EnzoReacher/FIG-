@@ -38,6 +38,10 @@ type Today = {
     fatGrams: number;
   };
 };
+type NutritionGoalResponse = {
+  goal: { calorieTarget: number } | null;
+  explanation: { calculatedTarget?: number | null } | null;
+};
 type DevicePermission = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -58,6 +62,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export default function Index() {
   const [today, setToday] = useState<Today | null>(null);
   const [foods, setFoods] = useState<Food[]>([]);
+  const [calorieTarget, setCalorieTarget] = useState<number | null>(null);
   const [steps, setSteps] = useState<{
     steps: number;
     permission: string;
@@ -83,19 +88,32 @@ export default function Index() {
   const [stepPermission, setStepPermission] =
     useState<DevicePermission>('unknown');
   const [manualSteps, setManualSteps] = useState('');
+  const [editingMealId, setEditingMealId] = useState<string | null>(null);
+  const [editMealName, setEditMealName] = useState('');
+  const [editItems, setEditItems] = useState<
+    Array<{ foodId: string; quantity: string; name: string }>
+  >([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [day, foodList, stepState] = await Promise.all([
+      const [day, foodList, stepState, goal] = await Promise.all([
         api<Today>('/v1/meals'),
         api<{ foods: Food[] }>('/v1/foods'),
         api<{ steps: number; permission: string }>('/v1/steps'),
+        api<NutritionGoalResponse>('/v1/nutrition-goal').catch(() => null),
       ]);
       setToday(day);
       setFoods(foodList.foods);
       setSteps(stepState);
+      setCalorieTarget(
+        goal?.goal?.calorieTarget ??
+          goal?.explanation?.calculatedTarget ??
+          null,
+      );
     } catch {
       setError('Unable to reach the API. Check your connection and retry.');
     } finally {
@@ -230,6 +248,8 @@ export default function Index() {
   const analyze = async () => {
     if (!imageUri) return;
     let temporaryUri: string | null = null;
+    setPhotoBusy(true);
+    setPhotoError(null);
     try {
       temporaryUri = `${FileSystem.cacheDirectory}forge-food-${Date.now()}.jpg`;
       await FileSystem.copyAsync({ from: imageUri, to: temporaryUri });
@@ -249,10 +269,59 @@ export default function Index() {
       await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
       setImageUri(null);
     } catch {
-      setError('Photo analysis failed. You can add the food manually.');
+      setPhotoError('Photo analysis failed. Retry or use manual entry.');
       if (temporaryUri)
         await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
+    } finally {
+      setPhotoBusy(false);
     }
+  };
+  const startMealEdit = (meal: Meal) => {
+    setEditingMealId(meal.meal.id);
+    setEditMealName(meal.meal.name);
+    setEditItems(
+      meal.items.map((item) => ({
+        foodId: item.food.id,
+        quantity: String(item.quantityHundredths / 100),
+        name: item.food.name,
+      })),
+    );
+  };
+  const saveMealEdit = async () => {
+    if (!editingMealId) return;
+    const items = editItems.map((item) => ({
+      foodId: item.foodId,
+      quantity: Number(item.quantity),
+    }));
+    if (
+      !editMealName.trim() ||
+      items.length === 0 ||
+      items.some(
+        (item) => !Number.isFinite(item.quantity) || item.quantity <= 0,
+      )
+    ) {
+      setError('Enter a meal name and positive quantities.');
+      return;
+    }
+    try {
+      await api(`/v1/meals/${editingMealId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: editMealName.trim(), items }),
+      });
+      setEditingMealId(null);
+      await load();
+    } catch {
+      setError('Meal could not be updated. Retry.');
+    }
+  };
+  const discardAnalysis = async () => {
+    if (temporaryImageId) {
+      await api(`/v1/food-analysis/${temporaryImageId}`, {
+        method: 'DELETE',
+      }).catch(() => undefined);
+    }
+    setAnalysis(null);
+    setTemporaryImageId(null);
   };
   const confirmAnalysis = async () => {
     if (!analysis) return;
@@ -297,7 +366,11 @@ export default function Index() {
             <Text style={styles.calories}>
               {Math.round(today.totals.calories)} kcal
             </Text>
-            <Text>of your daily target</Text>
+            <Text>
+              {calorieTarget === null
+                ? 'Daily target unavailable'
+                : `of ${calorieTarget} kcal daily target`}
+            </Text>
             <Text style={styles.steps}>
               Steps today: {steps?.steps ?? 0}
               {stepPermission === 'denied'
@@ -327,17 +400,91 @@ export default function Index() {
             ) : (
               today.meals.map((meal) => (
                 <View style={styles.meal} key={meal.meal.id}>
-                  <Text style={styles.mealName}>{meal.meal.name}</Text>
-                  <Text>{meal.items.map((i) => i.food.name).join(', ')}</Text>
-                  <Button
-                    title="Delete"
-                    onPress={async () => {
-                      await api(`/v1/meals/${meal.meal.id}`, {
-                        method: 'DELETE',
-                      });
-                      await load();
-                    }}
-                  />
+                  {editingMealId === meal.meal.id ? (
+                    <>
+                      <TextInput
+                        value={editMealName}
+                        onChangeText={setEditMealName}
+                        style={styles.input}
+                      />
+                      {editItems.map((item, index) => (
+                        <View
+                          key={`${item.foodId}-${index}`}
+                          style={styles.editItem}
+                        >
+                          <View>
+                            <Text>{item.name}</Text>
+                            <Button
+                              title="Remove"
+                              onPress={() =>
+                                setEditItems((current) =>
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                )
+                              }
+                            />
+                          </View>
+                          <TextInput
+                            value={item.quantity}
+                            onChangeText={(quantity) =>
+                              setEditItems((current) =>
+                                current.map((entry, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...entry, quantity }
+                                    : entry,
+                                ),
+                              )
+                            }
+                            keyboardType="decimal-pad"
+                            style={styles.quantityInput}
+                          />
+                        </View>
+                      ))}
+                      <Text>Add another food</Text>
+                      {foods.map((food) => (
+                        <Button
+                          key={food.id}
+                          title={`Add ${food.name}`}
+                          onPress={() =>
+                            setEditItems((current) => [
+                              ...current,
+                              {
+                                foodId: food.id,
+                                quantity: '1',
+                                name: food.name,
+                              },
+                            ])
+                          }
+                        />
+                      ))}
+                      <Button title="Save changes" onPress={saveMealEdit} />
+                      <Button
+                        title="Cancel"
+                        onPress={() => setEditingMealId(null)}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.mealName}>{meal.meal.name}</Text>
+                      <Text>
+                        {meal.items.map((i) => i.food.name).join(', ')}
+                      </Text>
+                      <Button
+                        title="Edit"
+                        onPress={() => startMealEdit(meal)}
+                      />
+                      <Button
+                        title="Delete"
+                        onPress={async () => {
+                          await api(`/v1/meals/${meal.meal.id}`, {
+                            method: 'DELETE',
+                          });
+                          await load();
+                        }}
+                      />
+                    </>
+                  )}
                 </View>
               ))
             )}
@@ -375,7 +522,12 @@ export default function Index() {
         Camera: {cameraPermission} · Gallery: {galleryPermission}
       </Text>
       {imageUri && <Text style={styles.muted}>Photo selected.</Text>}
-      <Button title="Analyze image" onPress={analyze} disabled={!imageUri} />
+      {photoError && <Text style={styles.errorText}>{photoError}</Text>}
+      <Button
+        title={photoBusy ? 'Analyzing…' : 'Analyze image'}
+        onPress={analyze}
+        disabled={!imageUri || photoBusy}
+      />
       {analysis && (
         <View style={styles.card}>
           <Text style={styles.mealName}>{analysis.name}</Text>
@@ -398,13 +550,7 @@ export default function Index() {
           </Text>
           <Text>{analysis.assumptions.join(' ')}</Text>
           <Button title="Confirm and add" onPress={confirmAnalysis} />
-          <Button
-            title="Discard"
-            onPress={() => {
-              setAnalysis(null);
-              setTemporaryImageId(null);
-            }}
-          />
+          <Button title="Discard" onPress={discardAnalysis} />
         </View>
       )}
     </ScrollView>
@@ -443,4 +589,18 @@ const styles = StyleSheet.create({
   },
   error: { backgroundColor: '#fee', padding: 12 },
   muted: { color: '#666', marginTop: 16 },
+  errorText: { color: '#a00', marginVertical: 8 },
+  editItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  quantityInput: {
+    borderColor: '#aaa',
+    borderRadius: 6,
+    borderWidth: 1,
+    minWidth: 80,
+    padding: 8,
+  },
 });

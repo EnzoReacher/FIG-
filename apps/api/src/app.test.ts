@@ -281,6 +281,66 @@ describe('nutrition and step routes', () => {
       },
     });
     expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json().temporaryImageDeleted).toBe(true);
+    const discarded = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/upload',
+      payload: { imageUri: 'file:///tmp/discard.jpg' },
+    });
+    const discardedId = discarded.json().temporaryImageId;
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/v1/food-analysis/${discardedId}`,
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/food-analysis',
+          payload: { temporaryImageId: discardedId },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await app.close();
+  });
+
+  it('cleans a temporary image when analysis fails', async () => {
+    const app = buildApp({
+      nutrition: createInMemoryNutritionRepository(),
+      analysis: {
+        analyze: async () => {
+          throw new Error('provider_failed');
+        },
+      },
+    });
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/upload',
+      payload: { imageUri: 'file:///tmp/failure.jpg' },
+    });
+    const id = upload.json().temporaryImageId;
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/food-analysis',
+          payload: { temporaryImageId: id },
+        })
+      ).statusCode,
+    ).toBe(500);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/food-analysis',
+          payload: { temporaryImageId: id },
+        })
+      ).statusCode,
+    ).toBe(400);
     await app.close();
   });
 });

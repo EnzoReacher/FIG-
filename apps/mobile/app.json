@@ -7,7 +7,8 @@
     "scheme": "forge-gym-health",
     "plugins": ["expo-router", "expo-image-picker"],
     "android": {
-      "package": "com.forgegymhealth.app"
+      "package": "com.forgegymhealth.app",
+      "permissions": ["android.permission.ACTIVITY_RECOGNITION"]
     }
   }
 }

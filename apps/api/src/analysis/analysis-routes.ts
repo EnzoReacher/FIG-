@@ -3,12 +3,12 @@ import type { AuthAdapter } from '../auth/auth-adapter.js';
 import type { NutritionRepository } from '../nutrition/nutrition-repository.js';
 import type { FoodAnalysisProvider } from './analysis-provider.js';
 import { analysisResultSchema } from './analysis-provider.js';
+import { createTemporaryImageStore } from './temporary-image-store.js';
 import { z } from 'zod';
 
 const uploadSchema = z.object({
   imageUri: z.string().url().or(z.string().startsWith('file://')),
 });
-const temporaryImages = new Map<string, string>();
 export function registerAnalysisRoutes(
   app: FastifyInstance,
   dependencies: {
@@ -17,15 +17,15 @@ export function registerAnalysisRoutes(
     nutrition: NutritionRepository;
   },
 ) {
+  const temporaryImages = createTemporaryImageStore();
   app.post('/v1/food-analysis/upload', async (request, reply) => {
     const parsed = uploadSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ error: 'image_required' });
-    const temporaryImageId = crypto.randomUUID();
-    temporaryImages.set(temporaryImageId, parsed.data.imageUri);
+    const image = temporaryImages.put(parsed.data.imageUri);
     return {
-      temporaryImageId,
-      expiresAfter: 'analysis_or_confirmation',
+      temporaryImageId: image.id,
+      expiresAt: new Date(image.expiresAt).toISOString(),
     };
   });
   app.post('/v1/food-analysis', async (request, reply) => {
@@ -37,13 +37,23 @@ export function registerAnalysisRoutes(
       ? temporaryImages.get(body.temporaryImageId)
       : body?.imageUrl;
     if (!imageUrl) return reply.code(400).send({ error: 'image_required' });
-    const result = await dependencies.provider.analyze(imageUrl);
-    if (body.temporaryImageId) temporaryImages.delete(body.temporaryImageId);
+    let result;
+    try {
+      result = await dependencies.provider.analyze(imageUrl);
+    } finally {
+      if (body.temporaryImageId) temporaryImages.delete(body.temporaryImageId);
+    }
     return {
       result: analysisResultSchema.parse(result),
       confirmed: false,
       temporaryImageDeleted: Boolean(body.temporaryImageId),
     };
+  });
+  app.delete('/v1/food-analysis/:temporaryImageId', async (request, reply) => {
+    temporaryImages.delete(
+      (request.params as { temporaryImageId: string }).temporaryImageId,
+    );
+    return reply.code(204).send();
   });
   app.post('/v1/food-analysis/confirm', async (request, reply) => {
     const body = request.body as {
