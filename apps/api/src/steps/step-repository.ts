@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { dailySteps } from '../db/schema.js';
 export interface StepRepository {
@@ -23,19 +23,17 @@ export function createStepRepository(db: Database): StepRepository {
       return row ?? null;
     },
     async sync(userId, day, steps, source = 'pedometer') {
-      const existing = await this.get(userId, day);
-      if (existing && existing.steps >= steps) return existing;
-      if (existing) {
-        const [row] = await db
-          .update(dailySteps)
-          .set({ steps, source, updatedAt: new Date() })
-          .where(and(eq(dailySteps.userId, userId), eq(dailySteps.day, day)))
-          .returning();
-        return row;
-      }
       const [row] = await db
         .insert(dailySteps)
         .values({ userId, day, steps, source })
+        .onConflictDoUpdate({
+          target: [dailySteps.userId, dailySteps.day],
+          set: {
+            steps: sql`GREATEST(${dailySteps.steps}, EXCLUDED.steps)`,
+            source: sql`CASE WHEN EXCLUDED.steps > ${dailySteps.steps} THEN EXCLUDED.source ELSE ${dailySteps.source} END`,
+            updatedAt: sql`CASE WHEN EXCLUDED.steps > ${dailySteps.steps} THEN NOW() ELSE ${dailySteps.updatedAt} END`,
+          },
+        })
         .returning();
       return row;
     },

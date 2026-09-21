@@ -4,6 +4,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -96,17 +97,26 @@ export const mealItems = pgTable('meal_items', {
   fatHundredths: integer('fat_hundredths').notNull(),
 });
 
-export const dailySteps = pgTable('daily_steps', {
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  day: date('day').notNull(),
-  steps: integer('steps').notNull(),
-  source: varchar('source', { length: 16 }).notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const dailySteps = pgTable(
+  'daily_steps',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    steps: integer('steps').notNull(),
+    source: varchar('source', { length: 16 }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userDayUnique: unique('daily_steps_user_id_day_unique').on(
+      table.userId,
+      table.day,
+    ),
+  }),
+);
 
 export const schema = {
   users,
