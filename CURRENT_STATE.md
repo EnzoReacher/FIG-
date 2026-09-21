@@ -24,3 +24,7 @@ The latest audit covers route, repository, idempotency, non-decreasing-total, fi
 - Android SDK, Java, adb, and an emulator/device are not installed here, so real-device Expo camera, gallery, Pedometer, and permission behavior cannot be verified.
 - The temporary upload store is in-process and development-only; production object storage, authentication, expiry cleanup, and durable deletion are still required.
 - Food analysis remains deterministic mock estimation. Production authentication, full meal editing UI, and a real analysis provider remain out of scope.
+
+## Exact next milestone
+
+Milestone 4: define and implement a server-side vision-provider integration only after an explicit provider decision, with secrets supplied through deployment configuration. Until then, continue device validation and productionize temporary image storage without adding a real provider here.
