@@ -22,6 +22,8 @@
 
 The latest audit covers route success and validation failures, malformed JSON, UUID/date/timezone validation, repository behavior, confirmation idempotency, non-decreasing step totals, fixed-point nutrition, ownership isolation, not-found behavior, meal replacement, DST day bounds, confirmation/discard, expiry, cleanup, temporary byte uploads, and API client-sync behavior.
 
+Commands passed during implementation: `pnpm test` (33 tests), `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and `git diff --check`. Final frozen install, migration generation/application, API process smoke test, and artifact/security scans are recorded by the final release audit rather than assumed here.
+
 ## Blockers and limitations
 
 - Android SDK, Java, adb, and an emulator/device are not installed here, so real-device Expo camera, gallery, Pedometer, and permission behavior cannot be verified.
@@ -30,4 +32,4 @@ The latest audit covers route success and validation failures, malformed JSON, U
 
 ## Exact next milestone
 
-Complete provider-independent privacy, authentication-boundary, test, mobile-state, documentation, and release audits. Then stop at the documented vision-provider decision gate; do not select or call a provider automatically.
+Run the final release audit, then stop. The owner must make the explicit choices listed in `docs/VISION_PROVIDER_DECISION.md` before any real provider work. Production authentication, object storage, hosted infrastructure, and physical Android verification also remain separate gates.
