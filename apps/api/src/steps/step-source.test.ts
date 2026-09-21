@@ -17,4 +17,14 @@ describe('steps', () => {
       (await repository.sync('user', '2026-01-01', 1600, 'manual')).source,
     ).toBe('manual');
   });
+
+  it('keeps users and local days isolated', async () => {
+    const repository = createInMemoryStepRepository();
+    await repository.sync('user-a', '2026-01-01', 100, 'manual');
+    await repository.sync('user-a', '2026-01-02', 200, 'expo-pedometer');
+    await repository.sync('user-b', '2026-01-01', 300, 'manual');
+    expect((await repository.get('user-a', '2026-01-01'))?.steps).toBe(100);
+    expect((await repository.get('user-a', '2026-01-02'))?.steps).toBe(200);
+    expect((await repository.get('user-b', '2026-01-01'))?.steps).toBe(300);
+  });
 });

@@ -4,13 +4,11 @@ import type { StepRepository } from './step-repository.js';
 import { z } from 'zod';
 
 const syncSchema = z.object({
-  day: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  day: z.string().date().optional(),
   steps: z.number().int().min(0).max(2_000_000),
-  source: z.string().trim().min(1).max(16),
+  source: z.enum(['expo-pedometer', 'manual']),
 });
+const querySchema = z.object({ day: z.string().date().optional() });
 export function registerStepRoutes(
   app: FastifyInstance,
   dependencies: {
@@ -18,10 +16,11 @@ export function registerStepRoutes(
     steps: StepRepository;
   },
 ) {
-  app.get('/v1/steps', async (request) => {
-    const day =
-      (request.query as { day?: string }).day ??
-      new Date().toISOString().slice(0, 10);
+  app.get('/v1/steps', async (request, reply) => {
+    const parsed = querySchema.safeParse(request.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: 'validation_error' });
+    const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
     const userId = (await dependencies.auth.getCurrentUser()).id;
     const stored = await dependencies.steps.get(userId, day);
     return {

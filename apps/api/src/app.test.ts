@@ -332,6 +332,22 @@ describe('nutrition and step routes', () => {
     expect(response.json().steps.steps).toBe(1234);
     const status = await app.inject({ method: 'GET', url: '/v1/steps' });
     expect(status.json().permission).toBe('unknown');
+    const lower = await app.inject({
+      method: 'POST',
+      url: '/v1/steps/sync',
+      payload: { day: '2026-01-01', steps: 100, source: 'manual' },
+    });
+    expect(lower.json().steps.steps).toBe(1234);
+    for (const payload of [
+      { day: 'bad', steps: 1, source: 'manual' },
+      { day: '2026-01-01', steps: -1, source: 'manual' },
+      { day: '2026-01-01', steps: 1, source: 'server' },
+    ]) {
+      expect(
+        (await app.inject({ method: 'POST', url: '/v1/steps/sync', payload }))
+          .statusCode,
+      ).toBe(400);
+    }
     await app.close();
   });
 

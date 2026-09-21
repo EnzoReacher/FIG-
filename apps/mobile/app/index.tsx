@@ -130,6 +130,10 @@ export default function Index() {
   const [stepPermission, setStepPermission] =
     useState<DevicePermission>('unknown');
   const [manualSteps, setManualSteps] = useState('');
+  const [stepSyncStatus, setStepSyncStatus] = useState<
+    'idle' | 'syncing' | 'synced' | 'failed'
+  >('idle');
+  const [lastStepSync, setLastStepSync] = useState<Date | null>(null);
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
   const [editMealName, setEditMealName] = useState('');
   const [editMealTime, setEditMealTime] = useState('');
@@ -222,9 +226,11 @@ export default function Index() {
     }
   };
   const syncSteps = useCallback(async () => {
+    setStepSyncStatus('syncing');
     try {
       if (!(await Pedometer.isAvailableAsync())) {
         setStepPermission('unavailable');
+        setStepSyncStatus('failed');
         return;
       }
       const permission = await Pedometer.getPermissionsAsync();
@@ -232,6 +238,7 @@ export default function Index() {
         const requested = await Pedometer.requestPermissionsAsync();
         if (!requested.granted) {
           setStepPermission('denied');
+          setStepSyncStatus('failed');
           return;
         }
       }
@@ -248,8 +255,11 @@ export default function Index() {
         }),
       });
       await load();
+      setLastStepSync(new Date());
+      setStepSyncStatus('synced');
     } catch {
       setStepPermission('unavailable');
+      setStepSyncStatus('failed');
     }
   }, [load]);
   const syncManualSteps = async () => {
@@ -268,8 +278,11 @@ export default function Index() {
       });
       setManualSteps('');
       await load();
+      setLastStepSync(new Date());
+      setStepSyncStatus('synced');
     } catch {
       setError('Manual steps could not be saved.');
+      setStepSyncStatus('failed');
     }
   };
   useEffect(() => {
@@ -475,6 +488,15 @@ export default function Index() {
             <Text style={styles.calories}>
               {Math.round(today.totals.calories)} kcal
             </Text>
+            <Text style={styles.muted}>
+              Step sync: {stepSyncStatus}
+              {lastStepSync
+                ? ` · last success ${lastStepSync.toLocaleTimeString()}`
+                : ' · not yet synced'}
+            </Text>
+            {stepSyncStatus === 'failed' && (
+              <Button title="Retry step sync" onPress={syncSteps} />
+            )}
             <Text>
               {calorieTarget === null
                 ? 'Daily target unavailable'
