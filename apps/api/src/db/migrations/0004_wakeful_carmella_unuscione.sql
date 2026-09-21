@@ -1,0 +1,1 @@
+ALTER TABLE "daily_steps" ADD CONSTRAINT "daily_steps_user_id_day_unique" UNIQUE("user_id","day");

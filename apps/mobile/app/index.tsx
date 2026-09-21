@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Pedometer } from 'expo-sensors';
 import {
   ActivityIndicator,
   Button,
@@ -57,14 +60,21 @@ export default function Index() {
   } | null>(null);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
-  const [imageUrl, setImageUrl] = useState('temporary://salad');
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [temporaryImageId, setTemporaryImageId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<{
     name: string;
     calories: number;
+    proteinGrams: number;
+    carbohydrateGrams: number;
+    fatGrams: number;
     confidence: number;
     assumptions: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stepPermission, setStepPermission] = useState<
+    'granted' | 'denied' | 'unavailable'
+  >('unavailable');
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,9 +94,41 @@ export default function Index() {
       setLoading(false);
     }
   }, []);
+  const syncSteps = useCallback(async () => {
+    try {
+      const permission = await Pedometer.getPermissionsAsync();
+      if (!permission.granted) {
+        const requested = await Pedometer.requestPermissionsAsync();
+        if (!requested.granted) {
+          setStepPermission('denied');
+          return;
+        }
+      }
+      setStepPermission('granted');
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const result = await Pedometer.getStepCountAsync(start, new Date());
+      await api('/v1/steps/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          day: start.toISOString().slice(0, 10),
+          steps: result.steps,
+          source: 'expo-pedometer',
+        }),
+      });
+      await load();
+    } catch {
+      setStepPermission('unavailable');
+    }
+  }, [load]);
   useEffect(() => {
     void load();
-  }, [load]);
+    void syncSteps();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void syncSteps();
+    });
+    return () => subscription.remove();
+  }, [load, syncSteps]);
   const addFood = async () => {
     try {
       const result = await api<{ food: Food }>('/v1/foods', {
@@ -117,12 +159,37 @@ export default function Index() {
       );
     }
   };
+  const choosePhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted)
+      return setError('Photo library permission denied.');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!result.canceled) setImageUri(result.assets[0].uri);
+  };
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) return setError('Camera permission denied.');
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (!result.canceled) setImageUri(result.assets[0].uri);
+  };
   const analyze = async () => {
+    if (!imageUri) return;
     try {
+      const upload = await api<{ temporaryImageId: string }>(
+        '/v1/food-analysis/upload',
+        { method: 'POST', body: JSON.stringify({ imageUri }) },
+      );
       const result = await api<{ result: typeof analysis }>(
         '/v1/food-analysis',
-        { method: 'POST', body: JSON.stringify({ imageUrl }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({ temporaryImageId: upload.temporaryImageId }),
+        },
       );
+      setTemporaryImageId(upload.temporaryImageId);
       setAnalysis(result.result);
     } catch {
       setError('Photo analysis failed. You can add the food manually.');
@@ -134,17 +201,19 @@ export default function Index() {
       await api('/v1/food-analysis/confirm', {
         method: 'POST',
         body: JSON.stringify({
-          imageUrl,
+          imageUrl: imageUri,
           result: {
             ...analysis,
-            proteinGrams: 12,
-            carbohydrateGrams: 34,
-            fatGrams: 14,
+            proteinGrams: analysis.proteinGrams,
+            carbohydrateGrams: analysis.carbohydrateGrams,
+            fatGrams: analysis.fatGrams,
           },
           eatenAt: new Date().toISOString(),
         }),
       });
       setAnalysis(null);
+      setImageUri(null);
+      setTemporaryImageId(null);
       await load();
     } catch {
       setError('The analyzed food could not be added.');
@@ -173,7 +242,7 @@ export default function Index() {
             <Text>of your daily target</Text>
             <Text style={styles.steps}>
               Steps today: {steps?.steps ?? 0}
-              {steps?.permission === 'denied'
+              {stepPermission === 'denied' || steps?.permission === 'denied'
                 ? ' (permission denied)'
                 : steps?.permission === 'unavailable'
                   ? ' (unavailable)'
@@ -232,23 +301,40 @@ export default function Index() {
         </Text>
       )}
       <Text style={styles.heading}>Photo analysis (review before adding)</Text>
-      <TextInput
-        value={imageUrl}
-        onChangeText={setImageUrl}
-        placeholder="Image URI"
-        style={styles.input}
-      />
-      <Button title="Analyze image" onPress={analyze} />
+      <Button title="Choose from gallery" onPress={choosePhoto} />
+      <Button title="Take a photo" onPress={takePhoto} />
+      {imageUri && <Text style={styles.muted}>Photo selected.</Text>}
+      <Button title="Analyze image" onPress={analyze} disabled={!imageUri} />
       {analysis && (
         <View style={styles.card}>
           <Text style={styles.mealName}>{analysis.name}</Text>
+          <TextInput
+            value={analysis.name}
+            onChangeText={(name) => setAnalysis({ ...analysis, name })}
+            style={styles.input}
+          />
+          <TextInput
+            value={String(analysis.calories)}
+            onChangeText={(value) =>
+              setAnalysis({ ...analysis, calories: Number(value) || 0 })
+            }
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
           <Text>
             {analysis.calories} kcal · confidence{' '}
             {(analysis.confidence * 100).toFixed(0)}%
           </Text>
           <Text>{analysis.assumptions.join(' ')}</Text>
           <Button title="Confirm and add" onPress={confirmAnalysis} />
-          <Button title="Discard" onPress={() => setAnalysis(null)} />
+          <Button
+            title="Discard"
+            onPress={() => {
+              setAnalysis(null);
+              setImageUri(null);
+              setTemporaryImageId(null);
+            }}
+          />
         </View>
       )}
     </ScrollView>

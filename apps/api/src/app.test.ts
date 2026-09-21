@@ -5,6 +5,9 @@ import {
   DevelopmentAuthAdapter,
 } from './auth/development-auth-adapter.js';
 import { createInMemoryProfileRepository } from './profile/profile-repository.js';
+import { createInMemoryNutritionRepository } from './nutrition/nutrition-repository.js';
+import { MockStepSource } from './steps/step-source.js';
+import { createInMemoryStepRepository } from './steps/step-repository.js';
 
 describe('health endpoint', () => {
   it('reports API availability without domain dependencies', async () => {
@@ -171,6 +174,75 @@ describe('development profile endpoint', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: 'profile_not_found' });
+    await app.close();
+  });
+});
+
+const testProfile = (userId: string) => ({
+  userId,
+  timezone: 'UTC',
+  locale: 'en',
+  units: 'metric',
+  age: null,
+  sex: null,
+  heightCm: null,
+  weightKgHundredths: null,
+  activityLevel: 'moderate',
+  goal: 'maintain',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+describe('nutrition and step routes', () => {
+  it('creates and lists foods, with not-found meal ownership protection', async () => {
+    const nutrition = createInMemoryNutritionRepository();
+    const profiles = createInMemoryProfileRepository({
+      profile: testProfile(DEVELOPMENT_USER_ID),
+      goal: null,
+    });
+    const app = buildApp({ profiles, nutrition });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/foods',
+      payload: {
+        name: 'Banana',
+        calories: 89.12,
+        proteinGrams: 1.1,
+        carbohydrateGrams: 22.8,
+        fatGrams: 0.3,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().food.caloriesHundredths).toBe(8912);
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/foods' })).json().foods,
+    ).toHaveLength(1);
+    const missing = await app.inject({
+      method: 'PATCH',
+      url: `/v1/meals/${crypto.randomUUID()}`,
+      payload: { name: 'Nope' },
+    });
+    expect(missing.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('accepts validated client step totals without reading a server sensor', async () => {
+    const steps = createInMemoryStepRepository();
+    const app = buildApp({
+      steps,
+      stepSource: new MockStepSource(0, 'denied'),
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/steps/sync',
+      payload: {
+        day: '2026-01-01',
+        steps: 1234,
+        source: 'expo-pedometer',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().steps.steps).toBe(1234);
     await app.close();
   });
 });
