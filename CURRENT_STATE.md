@@ -9,7 +9,7 @@
 - Daily steps table with a unique `(user_id, day)` constraint and atomic non-decreasing upsert. The API accepts validated client totals and source metadata; it does not attempt to read a phone sensor.
 - Mobile foreground/resume synchronization through the Expo SDK 52-compatible `expo-sensors` Pedometer API, with device-local permission handling, daily totals, and manual fallback. The API does not read a server-side sensor.
 - Camera/gallery capture uses Expo ImagePicker with permission, cancel, retry, preview, and unavailable-device states. The mobile app copies selected media to cache, uploads bounded image bytes rather than a device-only URI, and deletes the cache copy.
-- Deterministic mock food analysis uses versioned provider input/output schemas with provider/model metadata, detected items, portion estimates, confidence, and assumptions. Results remain editable and require explicit confirmation.
+- Deterministic mock food analysis uses versioned provider input/output schemas with provider/model metadata, detected items, portion estimates, confidence, assumptions, normalized failures, and single-food, mixed-meal, and low-confidence fixtures. Results remain editable and require explicit confirmation.
 - Temporary image records are owner-scoped, expire after 15 minutes, and are consumed before provider analysis. Review records expire, support discard, and make repeated confirmation idempotent so one analysis creates at most one meal.
 - No real AI provider, provider secret, or Forge-Gym-V2 file has been added or changed.
 

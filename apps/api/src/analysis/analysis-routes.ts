@@ -4,6 +4,7 @@ import type { NutritionRepository } from '../nutrition/nutrition-repository.js';
 import type { FoodAnalysisProvider } from './analysis-provider.js';
 import {
   analysisResultSchema,
+  FoodAnalysisProviderError,
   providerInputSchema,
 } from './analysis-provider.js';
 import { createAnalysisReviewStore } from './analysis-review-store.js';
@@ -64,8 +65,14 @@ export function registerAnalysisRoutes(
         confirmed: false,
         temporaryImageDeleted: true,
       };
-    } catch {
-      return reply.code(502).send({ error: 'analysis_failed' });
+    } catch (error) {
+      const normalized =
+        error instanceof FoodAnalysisProviderError
+          ? error.code
+          : error instanceof z.ZodError
+            ? 'invalid_output'
+            : 'provider_failed';
+      return reply.code(502).send({ error: normalized });
     }
   });
   app.delete(

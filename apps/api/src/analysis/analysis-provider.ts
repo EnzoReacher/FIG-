@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resultFixtures } from './analysis-fixtures.js';
 
 export const providerInputSchema = z
   .object({
@@ -51,30 +52,24 @@ export interface FoodAnalysisProvider {
   readonly model: string;
   analyze(input: ProviderInput): Promise<AnalysisResult>;
 }
+export class FoodAnalysisProviderError extends Error {
+  constructor(
+    readonly code: 'provider_failed' | 'provider_timeout' | 'invalid_output',
+  ) {
+    super(code);
+  }
+}
 export class MockFoodAnalysisProvider implements FoodAnalysisProvider {
   readonly name = 'deterministic-mock';
   readonly model = 'fixture-v1';
   async analyze(input: ProviderInput) {
     providerInputSchema.parse(input);
-    return analysisResultSchema.parse({
-      schemaVersion: '1',
-      providerName: this.name,
-      modelName: this.model,
-      name: 'Garden salad',
-      portionDescription: 'One medium bowl, estimated from the image',
-      detectedItems: [
-        {
-          name: 'Mixed salad',
-          portionDescription: 'One medium bowl',
-          confidence: 0.72,
-        },
-      ],
-      calories: 320,
-      proteinGrams: 12,
-      carbohydrateGrams: 34,
-      fatGrams: 14,
-      confidence: 0.72,
-      assumptions: ['Portion size was estimated from the image.'],
-    });
+    const fixture =
+      input.bytesBase64 === 'bWl4ZWQ='
+        ? resultFixtures.mixedMeal
+        : input.bytesBase64 === 'bG93'
+          ? resultFixtures.lowConfidence
+          : resultFixtures.singleFood;
+    return analysisResultSchema.parse(fixture);
   }
 }
