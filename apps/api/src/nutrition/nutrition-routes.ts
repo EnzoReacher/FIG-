@@ -44,11 +44,10 @@ export function registerNutritionRoutes(
       ),
     };
   });
-  app.get('/v1/foods', async () => ({
-    foods: await dependencies.nutrition.listFoods(
-      (await dependencies.auth.getCurrentUser()).id,
-    ),
-  }));
+  app.get('/v1/foods', async () => {
+    const userId = (await dependencies.auth.getCurrentUser()).id;
+    return { foods: await dependencies.nutrition.listFoods(userId) };
+  });
   app.post('/v1/meals', async (request, reply) => {
     const parsed = mealInputSchema.safeParse(request.body);
     if (!parsed.success) return invalid(reply, parsed.error);

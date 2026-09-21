@@ -264,6 +264,33 @@ export function createInMemoryNutritionRepository(
       if (!meal) return null;
       if (input.name) meal.meal.name = input.name;
       if (input.eatenAt) meal.meal.eatenAt = new Date(input.eatenAt);
+      if (input.items) {
+        const items = input.items.map((item) => {
+          const food = foodList.find(
+            (candidate) =>
+              candidate.id === item.foodId && candidate.userId === userId,
+          );
+          if (!food) throw new Error('food_not_found');
+          return {
+            id: crypto.randomUUID(),
+            mealId: meal.meal.id,
+            foodId: food.id,
+            quantityHundredths: toHundredths(item.quantity),
+            caloriesHundredths: Math.round(
+              food.caloriesHundredths * item.quantity,
+            ),
+            proteinHundredths: Math.round(
+              food.proteinHundredths * item.quantity,
+            ),
+            carbohydrateHundredths: Math.round(
+              food.carbohydrateHundredths * item.quantity,
+            ),
+            fatHundredths: Math.round(food.fatHundredths * item.quantity),
+            food,
+          };
+        });
+        meal.items = items;
+      }
       return meal;
     },
     async deleteMeal(userId, id) {
