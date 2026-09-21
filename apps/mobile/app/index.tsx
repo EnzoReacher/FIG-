@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Pedometer } from 'expo-sensors';
 import {
@@ -14,6 +15,8 @@ import {
 } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+const localDay = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 type Food = {
   id: string;
   name: string;
@@ -35,6 +38,7 @@ type Today = {
     fatGrams: number;
   };
 };
+type DevicePermission = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
@@ -62,6 +66,10 @@ export default function Index() {
   const [calories, setCalories] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [temporaryImageId, setTemporaryImageId] = useState<string | null>(null);
+  const [cameraPermission, setCameraPermission] =
+    useState<DevicePermission>('unknown');
+  const [galleryPermission, setGalleryPermission] =
+    useState<DevicePermission>('unknown');
   const [analysis, setAnalysis] = useState<{
     name: string;
     calories: number;
@@ -72,9 +80,9 @@ export default function Index() {
     assumptions: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [stepPermission, setStepPermission] = useState<
-    'granted' | 'denied' | 'unavailable'
-  >('unavailable');
+  const [stepPermission, setStepPermission] =
+    useState<DevicePermission>('unknown');
+  const [manualSteps, setManualSteps] = useState('');
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +104,10 @@ export default function Index() {
   }, []);
   const syncSteps = useCallback(async () => {
     try {
+      if (!(await Pedometer.isAvailableAsync())) {
+        setStepPermission('unavailable');
+        return;
+      }
       const permission = await Pedometer.getPermissionsAsync();
       if (!permission.granted) {
         const requested = await Pedometer.requestPermissionsAsync();
@@ -111,7 +123,7 @@ export default function Index() {
       await api('/v1/steps/sync', {
         method: 'POST',
         body: JSON.stringify({
-          day: start.toISOString().slice(0, 10),
+          day: localDay(start),
           steps: result.steps,
           source: 'expo-pedometer',
         }),
@@ -121,6 +133,26 @@ export default function Index() {
       setStepPermission('unavailable');
     }
   }, [load]);
+  const syncManualSteps = async () => {
+    const steps = Number(manualSteps);
+    if (!Number.isInteger(steps) || steps < 0) {
+      setError('Enter a non-negative whole-number step total.');
+      return;
+    }
+    try {
+      await api('/v1/steps/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          steps,
+          source: 'manual',
+        }),
+      });
+      setManualSteps('');
+      await load();
+    } catch {
+      setError('Manual steps could not be saved.');
+    }
+  };
   useEffect(() => {
     void load();
     void syncSteps();
@@ -160,27 +192,50 @@ export default function Index() {
     }
   };
   const choosePhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted)
-      return setError('Photo library permission denied.');
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-    });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    setError(null);
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setGalleryPermission('denied');
+        return;
+      }
+      setGalleryPermission('granted');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+      });
+      if (!result.canceled) setImageUri(result.assets[0].uri);
+    } catch {
+      setGalleryPermission('unavailable');
+      setError('Gallery is unavailable on this device.');
+    }
   };
   const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return setError('Camera permission denied.');
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    setError(null);
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        setCameraPermission('denied');
+        return;
+      }
+      setCameraPermission('granted');
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+      if (!result.canceled) setImageUri(result.assets[0].uri);
+    } catch {
+      setCameraPermission('unavailable');
+      setError('Camera is unavailable on this device.');
+    }
   };
   const analyze = async () => {
     if (!imageUri) return;
+    let temporaryUri: string | null = null;
     try {
+      temporaryUri = `${FileSystem.cacheDirectory}forge-food-${Date.now()}.jpg`;
+      await FileSystem.copyAsync({ from: imageUri, to: temporaryUri });
       const upload = await api<{ temporaryImageId: string }>(
         '/v1/food-analysis/upload',
-        { method: 'POST', body: JSON.stringify({ imageUri }) },
+        { method: 'POST', body: JSON.stringify({ imageUri: temporaryUri }) },
       );
       const result = await api<{ result: typeof analysis }>(
         '/v1/food-analysis',
@@ -191,8 +246,12 @@ export default function Index() {
       );
       setTemporaryImageId(upload.temporaryImageId);
       setAnalysis(result.result);
+      await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
+      setImageUri(null);
     } catch {
       setError('Photo analysis failed. You can add the food manually.');
+      if (temporaryUri)
+        await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
     }
   };
   const confirmAnalysis = async () => {
@@ -201,7 +260,7 @@ export default function Index() {
       await api('/v1/food-analysis/confirm', {
         method: 'POST',
         body: JSON.stringify({
-          imageUrl: imageUri,
+          temporaryImageId,
           result: {
             ...analysis,
             proteinGrams: analysis.proteinGrams,
@@ -212,7 +271,6 @@ export default function Index() {
         }),
       });
       setAnalysis(null);
-      setImageUri(null);
       setTemporaryImageId(null);
       await load();
     } catch {
@@ -242,12 +300,22 @@ export default function Index() {
             <Text>of your daily target</Text>
             <Text style={styles.steps}>
               Steps today: {steps?.steps ?? 0}
-              {stepPermission === 'denied' || steps?.permission === 'denied'
+              {stepPermission === 'denied'
                 ? ' (permission denied)'
-                : steps?.permission === 'unavailable'
+                : stepPermission === 'unavailable'
                   ? ' (unavailable)'
-                  : ''}
+                  : stepPermission === 'unknown'
+                    ? ' (manual entry available)'
+                    : ''}
             </Text>
+            <TextInput
+              placeholder="Manual step total"
+              value={manualSteps}
+              onChangeText={setManualSteps}
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+            <Button title="Save manual steps" onPress={syncManualSteps} />
             <View style={styles.card}>
               <Text>Protein {today.totals.proteinGrams.toFixed(1)} g</Text>
               <Text>Carbs {today.totals.carbohydrateGrams.toFixed(1)} g</Text>
@@ -303,6 +371,9 @@ export default function Index() {
       <Text style={styles.heading}>Photo analysis (review before adding)</Text>
       <Button title="Choose from gallery" onPress={choosePhoto} />
       <Button title="Take a photo" onPress={takePhoto} />
+      <Text style={styles.muted}>
+        Camera: {cameraPermission} · Gallery: {galleryPermission}
+      </Text>
       {imageUri && <Text style={styles.muted}>Photo selected.</Text>}
       <Button title="Analyze image" onPress={analyze} disabled={!imageUri} />
       {analysis && (
@@ -331,7 +402,6 @@ export default function Index() {
             title="Discard"
             onPress={() => {
               setAnalysis(null);
-              setImageUri(null);
               setTemporaryImageId(null);
             }}
           />

@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "forge-gym-health",
-    "plugins": ["expo-router"],
+    "plugins": ["expo-router", "expo-image-picker"],
     "android": {
       "package": "com.forgegymhealth.app"
     }

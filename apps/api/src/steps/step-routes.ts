@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { AuthAdapter } from '../auth/auth-adapter.js';
 import type { StepRepository } from './step-repository.js';
-import type { StepSource } from './step-source.js';
 import { z } from 'zod';
 
 const syncSchema = z.object({
@@ -17,7 +16,6 @@ export function registerStepRoutes(
   dependencies: {
     auth: AuthAdapter;
     steps: StepRepository;
-    source: StepSource;
   },
 ) {
   app.get('/v1/steps', async (request) => {
@@ -29,7 +27,8 @@ export function registerStepRoutes(
     return {
       day,
       steps: stored?.steps ?? 0,
-      permission: await dependencies.source.permission(),
+      // Sensor permission is device-local; the API cannot inspect a phone sensor.
+      permission: 'unknown',
       source: stored?.source ?? 'none',
     };
   });

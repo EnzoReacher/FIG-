@@ -6,7 +6,6 @@ import type { ProfileRepository } from './profile/profile-repository.js';
 import { registerNutritionRoutes } from './nutrition/nutrition-routes.js';
 import type { NutritionRepository } from './nutrition/nutrition-repository.js';
 import type { StepRepository } from './steps/step-repository.js';
-import type { StepSource } from './steps/step-source.js';
 import { registerStepRoutes } from './steps/step-routes.js';
 import type { FoodAnalysisProvider } from './analysis/analysis-provider.js';
 import { registerAnalysisRoutes } from './analysis/analysis-routes.js';
@@ -16,7 +15,6 @@ export function buildApp(dependencies?: {
   profiles?: ProfileRepository;
   nutrition?: NutritionRepository;
   steps?: StepRepository;
-  stepSource?: StepSource;
   analysis?: FoodAnalysisProvider;
 }) {
   const app = Fastify({ logger: true });
@@ -35,11 +33,10 @@ export function buildApp(dependencies?: {
       profiles: dependencies.profiles,
       nutrition: dependencies.nutrition,
     });
-  if (dependencies?.steps && dependencies?.stepSource)
+  if (dependencies?.steps)
     registerStepRoutes(app, {
       auth: dependencies.auth ?? new DevelopmentAuthAdapter(),
       steps: dependencies.steps,
-      source: dependencies.stepSource,
     });
   if (dependencies?.nutrition && dependencies?.analysis)
     registerAnalysisRoutes(app, {

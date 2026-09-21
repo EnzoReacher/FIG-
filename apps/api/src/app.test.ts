@@ -6,7 +6,6 @@ import {
 } from './auth/development-auth-adapter.js';
 import { createInMemoryProfileRepository } from './profile/profile-repository.js';
 import { createInMemoryNutritionRepository } from './nutrition/nutrition-repository.js';
-import { MockStepSource } from './steps/step-source.js';
 import { createInMemoryStepRepository } from './steps/step-repository.js';
 import { MockFoodAnalysisProvider } from './analysis/analysis-provider.js';
 
@@ -231,7 +230,6 @@ describe('nutrition and step routes', () => {
     const steps = createInMemoryStepRepository();
     const app = buildApp({
       steps,
-      stepSource: new MockStepSource(0, 'denied'),
     });
     const response = await app.inject({
       method: 'POST',
@@ -244,6 +242,8 @@ describe('nutrition and step routes', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().steps.steps).toBe(1234);
+    const status = await app.inject({ method: 'GET', url: '/v1/steps' });
+    expect(status.json().permission).toBe('unknown');
     await app.close();
   });
 

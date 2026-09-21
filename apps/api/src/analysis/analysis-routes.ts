@@ -57,7 +57,7 @@ export function registerAnalysisRoutes(
       return reply
         .code(400)
         .send({ error: 'invalid_analysis', issues: parsed.error.issues });
-    if (!body.eatenAt || (!body.imageUrl && !body.temporaryImageId))
+    if (!body.eatenAt)
       return reply.code(400).send({ error: 'confirmation_data_required' });
     const userId = (await dependencies.auth.getCurrentUser()).id;
     const food = await dependencies.nutrition.createFood(userId, parsed.data);
