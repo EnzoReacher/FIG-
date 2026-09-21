@@ -6,3 +6,8 @@ dist/
 .expo/
 coverage/
 *.log
+*.sqlite
+*.sqlite3
+*.db
+uploads/
+tmp/

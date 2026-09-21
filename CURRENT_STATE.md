@@ -24,7 +24,7 @@ The latest audit covers route, repository, confirmation idempotency, non-decreas
 ## Blockers and limitations
 
 - Android SDK, Java, adb, and an emulator/device are not installed here, so real-device Expo camera, gallery, Pedometer, and permission behavior cannot be verified.
-- Temporary image and review stores are in-process and development-only; process restarts discard pending work, and production object storage with durable deletion is still required.
+- Temporary image and review stores are in-process and development-only; process restarts discard pending work. A future private object-storage interface is defined, but durable deletion, lifecycle enforcement, and deletion auditing are not implemented.
 - Food analysis remains deterministic mock estimation. Production authentication and a real analysis provider remain out of scope.
 
 ## Exact next milestone

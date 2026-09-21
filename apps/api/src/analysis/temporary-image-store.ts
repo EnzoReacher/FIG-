@@ -16,7 +16,15 @@ export interface TemporaryImageStore {
   put(input: TemporaryImageInput): Pick<TemporaryImage, 'id' | 'expiresAt'>;
   take(id: string, ownerId: string): TemporaryImage | undefined;
   delete(id: string, ownerId: string): boolean;
+  cleanup(): number;
   size(): number;
+}
+
+export interface ProductionTemporaryImageStorage {
+  create(input: TemporaryImageInput): Promise<{ id: string; expiresAt: Date }>;
+  consume(id: string, ownerId: string): Promise<TemporaryImageInput | null>;
+  delete(id: string, ownerId: string): Promise<boolean>;
+  deleteExpired(now: Date): Promise<number>;
 }
 
 export function createTemporaryImageStore(
@@ -26,9 +34,14 @@ export function createTemporaryImageStore(
   const images = new Map<string, TemporaryImage>();
   const cleanup = () => {
     const current = now();
+    let deleted = 0;
     for (const [id, image] of images) {
-      if (image.expiresAt <= current) images.delete(id);
+      if (image.expiresAt <= current) {
+        images.delete(id);
+        deleted += 1;
+      }
     }
+    return deleted;
   };
   return {
     put(input) {
@@ -50,6 +63,7 @@ export function createTemporaryImageStore(
       const image = images.get(id);
       return image?.ownerId === ownerId ? images.delete(id) : false;
     },
+    cleanup,
     size() {
       cleanup();
       return images.size;
