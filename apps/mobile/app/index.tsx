@@ -39,8 +39,26 @@ type Today = {
   };
 };
 type NutritionGoalResponse = {
-  goal: { calorieTarget: number } | null;
+  goal: {
+    calorieTarget: number;
+    proteinTargetHundredths: number;
+    carbohydrateTargetHundredths: number;
+    fatTargetHundredths: number;
+    source: string;
+  } | null;
   explanation: { calculatedTarget?: number | null } | null;
+};
+type ProfileResponse = {
+  profile: {
+    timezone: string;
+    age: number | null;
+    sex: 'male' | 'female' | 'other' | null;
+    heightCm: number | null;
+    weightKgHundredths: number | null;
+    activityLevel: string;
+    goal: string;
+  };
+  goal: NutritionGoalResponse['goal'];
 };
 type DevicePermission = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
@@ -63,6 +81,24 @@ export default function Index() {
   const [today, setToday] = useState<Today | null>(null);
   const [foods, setFoods] = useState<Food[]>([]);
   const [calorieTarget, setCalorieTarget] = useState<number | null>(null);
+  const [goalDetails, setGoalDetails] = useState<NutritionGoalResponse | null>(
+    null,
+  );
+  const [profile, setProfile] = useState<ProfileResponse['profile'] | null>(
+    null,
+  );
+  const [profileForm, setProfileForm] = useState({
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    age: '',
+    sex: 'other',
+    heightCm: '',
+    weightKg: '',
+    activityLevel: 'moderate',
+    goal: 'maintain',
+    calorieTarget: '',
+  });
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [steps, setSteps] = useState<{
     steps: number;
     permission: string;
@@ -100,12 +136,14 @@ export default function Index() {
     setLoading(true);
     setError(null);
     try {
-      const [day, foodList, stepState, goal] = await Promise.all([
-        api<Today>('/v1/meals'),
-        api<{ foods: Food[] }>('/v1/foods'),
-        api<{ steps: number; permission: string }>('/v1/steps'),
-        api<NutritionGoalResponse>('/v1/nutrition-goal').catch(() => null),
-      ]);
+      const [day, foodList, stepState, goal, profileResponse] =
+        await Promise.all([
+          api<Today>('/v1/meals'),
+          api<{ foods: Food[] }>('/v1/foods'),
+          api<{ steps: number; permission: string }>('/v1/steps'),
+          api<NutritionGoalResponse>('/v1/nutrition-goal').catch(() => null),
+          api<ProfileResponse>('/v1/profile').catch(() => null),
+        ]);
       setToday(day);
       setFoods(foodList.foods);
       setSteps(stepState);
@@ -114,12 +152,68 @@ export default function Index() {
           goal?.explanation?.calculatedTarget ??
           null,
       );
+      setGoalDetails(goal);
+      if (profileResponse) {
+        setProfile(profileResponse.profile);
+        setProfileForm({
+          timezone: profileResponse.profile.timezone,
+          age: profileResponse.profile.age?.toString() ?? '',
+          sex: profileResponse.profile.sex ?? 'other',
+          heightCm: profileResponse.profile.heightCm?.toString() ?? '',
+          weightKg: profileResponse.profile.weightKgHundredths
+            ? String(profileResponse.profile.weightKgHundredths / 100)
+            : '',
+          activityLevel: profileResponse.profile.activityLevel,
+          goal: profileResponse.profile.goal,
+          calorieTarget: profileResponse.goal?.calorieTarget?.toString() ?? '',
+        });
+      }
     } catch {
       setError('Unable to reach the API. Check your connection and retry.');
     } finally {
       setLoading(false);
     }
   }, []);
+  const saveProfile = async () => {
+    setProfileBusy(true);
+    setProfileError(null);
+    try {
+      const age = Number(profileForm.age);
+      const heightCm = Number(profileForm.heightCm);
+      const weightKg = Number(profileForm.weightKg);
+      if (!age || !heightCm || !weightKg) {
+        setProfileError(
+          'Age, height, and weight are required to calculate a target.',
+        );
+        return;
+      }
+      await api('/v1/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          timezone: profileForm.timezone,
+          age,
+          sex: profileForm.sex,
+          heightCm,
+          weightKgHundredths: Math.round(weightKg * 100),
+          activityLevel: profileForm.activityLevel,
+          goal: profileForm.goal,
+        }),
+      });
+      await api('/v1/nutrition-goal', {
+        method: 'PATCH',
+        body: JSON.stringify(
+          profileForm.calorieTarget
+            ? { calorieTarget: Number(profileForm.calorieTarget) }
+            : {},
+        ),
+      });
+      await load();
+    } catch {
+      setProfileError('Profile or calorie target could not be saved. Retry.');
+    } finally {
+      setProfileBusy(false);
+    }
+  };
   const syncSteps = useCallback(async () => {
     try {
       if (!(await Pedometer.isAvailableAsync())) {
@@ -491,6 +585,95 @@ export default function Index() {
           </>
         )
       )}
+      <Text style={styles.heading}>Profile and calorie goal</Text>
+      {!profile && (
+        <Text style={styles.muted}>
+          Complete your profile to calculate an estimated daily target.
+        </Text>
+      )}
+      <Text>Timezone: {profileForm.timezone}</Text>
+      <Text style={styles.muted}>
+        Your profile timezone controls meal-day boundaries.
+      </Text>
+      <TextInput
+        placeholder="Age"
+        value={profileForm.age}
+        onChangeText={(age) => setProfileForm({ ...profileForm, age })}
+        keyboardType="number-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Height (cm)"
+        value={profileForm.heightCm}
+        onChangeText={(heightCm) =>
+          setProfileForm({ ...profileForm, heightCm })
+        }
+        keyboardType="number-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Weight (kg)"
+        value={profileForm.weightKg}
+        onChangeText={(weightKg) =>
+          setProfileForm({ ...profileForm, weightKg })
+        }
+        keyboardType="decimal-pad"
+        style={styles.input}
+      />
+      <Text>Sex</Text>
+      {(['male', 'female', 'other'] as const).map((sex) => (
+        <Button
+          key={sex}
+          title={`${profileForm.sex === sex ? '✓ ' : ''}${sex}`}
+          onPress={() => setProfileForm({ ...profileForm, sex })}
+        />
+      ))}
+      <Text>Activity level</Text>
+      {['sedentary', 'light', 'moderate', 'active', 'very_active'].map(
+        (activityLevel) => (
+          <Button
+            key={activityLevel}
+            title={`${profileForm.activityLevel === activityLevel ? '✓ ' : ''}${activityLevel}`}
+            onPress={() => setProfileForm({ ...profileForm, activityLevel })}
+          />
+        ),
+      )}
+      <Text>Goal</Text>
+      {['lose', 'maintain', 'gain'].map((goal) => (
+        <Button
+          key={goal}
+          title={`${profileForm.goal === goal ? '✓ ' : ''}${goal}`}
+          onPress={() => setProfileForm({ ...profileForm, goal })}
+        />
+      ))}
+      <TextInput
+        placeholder="Optional manual calorie override"
+        value={profileForm.calorieTarget}
+        onChangeText={(calorieTarget) =>
+          setProfileForm({ ...profileForm, calorieTarget })
+        }
+        keyboardType="number-pad"
+        style={styles.input}
+      />
+      <Text style={styles.muted}>
+        Calculated targets are estimates, not medical advice.{' '}
+        {goalDetails?.goal?.source === 'manual'
+          ? 'Your current target is a manual override.'
+          : 'Your current target is calculated from your profile.'}
+      </Text>
+      {goalDetails?.goal && (
+        <Text>
+          Targets: {goalDetails.goal.proteinTargetHundredths / 100} g protein ·{' '}
+          {goalDetails.goal.carbohydrateTargetHundredths / 100} g carbs ·{' '}
+          {goalDetails.goal.fatTargetHundredths / 100} g fat
+        </Text>
+      )}
+      {profileError && <Text style={styles.errorText}>{profileError}</Text>}
+      <Button
+        title={profileBusy ? 'Saving…' : 'Save profile and target'}
+        onPress={saveProfile}
+        disabled={profileBusy}
+      />
       <Text style={styles.heading}>Manual food entry</Text>
       <TextInput
         placeholder="Food name"
