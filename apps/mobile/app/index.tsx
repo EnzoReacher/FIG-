@@ -98,6 +98,7 @@ export default function Index() {
     calorieTarget: '',
   });
   const [profileBusy, setProfileBusy] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [steps, setSteps] = useState<{
     steps: number;
@@ -151,8 +152,20 @@ export default function Index() {
     Array<{ foodId: string; quantity: string; name: string }>
   >([]);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoStage, setPhotoStage] = useState<
+    | 'idle'
+    | 'selecting'
+    | 'selected'
+    | 'uploading'
+    | 'analyzing'
+    | 'reviewing'
+    | 'confirming'
+    | 'discarding'
+    | 'failed'
+  >('idle');
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastDataRefresh, setLastDataRefresh] = useState<Date | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -189,6 +202,7 @@ export default function Index() {
           calorieTarget: profileResponse.goal?.calorieTarget?.toString() ?? '',
         });
       }
+      setLastDataRefresh(new Date());
     } catch {
       setError('Unable to reach the API. Check your connection and retry.');
     } finally {
@@ -197,6 +211,7 @@ export default function Index() {
   }, []);
   const saveProfile = async () => {
     setProfileBusy(true);
+    setProfileSaved(false);
     setProfileError(null);
     try {
       const age = Number(profileForm.age);
@@ -229,6 +244,7 @@ export default function Index() {
         ),
       });
       await load();
+      setProfileSaved(true);
     } catch {
       setProfileError('Profile or calorie target could not be saved. Retry.');
     } finally {
@@ -338,6 +354,7 @@ export default function Index() {
   };
   const choosePhoto = async () => {
     setError(null);
+    setPhotoStage('selecting');
     try {
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -350,14 +367,19 @@ export default function Index() {
         mediaTypes: ['images'],
         quality: 0.8,
       });
-      if (!result.canceled) setImageUri(result.assets[0].uri);
+      if (!result.canceled) {
+        setImageUri(result.assets[0].uri);
+        setPhotoStage('selected');
+      } else setPhotoStage('idle');
     } catch {
       setGalleryPermission('unavailable');
       setError('Gallery is unavailable on this device.');
+      setPhotoStage('failed');
     }
   };
   const takePhoto = async () => {
     setError(null);
+    setPhotoStage('selecting');
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -366,10 +388,14 @@ export default function Index() {
       }
       setCameraPermission('granted');
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-      if (!result.canceled) setImageUri(result.assets[0].uri);
+      if (!result.canceled) {
+        setImageUri(result.assets[0].uri);
+        setPhotoStage('selected');
+      } else setPhotoStage('idle');
     } catch {
       setCameraPermission('unavailable');
       setError('Camera is unavailable on this device.');
+      setPhotoStage('failed');
     }
   };
   const analyze = async () => {
@@ -377,6 +403,7 @@ export default function Index() {
     let temporaryUri: string | null = null;
     let uploadedImageId: string | null = null;
     setPhotoBusy(true);
+    setPhotoStage('uploading');
     setPhotoError(null);
     try {
       temporaryUri = `${FileSystem.cacheDirectory}forge-food-${Date.now()}.jpg`;
@@ -400,6 +427,7 @@ export default function Index() {
       );
       uploadedImageId = upload.temporaryImageId;
       setTemporaryImageId(upload.temporaryImageId);
+      setPhotoStage('analyzing');
       const result = await api<{
         analysisId: string;
         result: typeof analysis;
@@ -409,11 +437,13 @@ export default function Index() {
       });
       setAnalysisId(result.analysisId);
       setAnalysis(result.result);
+      setPhotoStage('reviewing');
       setTemporaryImageId(null);
       await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
       setImageUri(null);
     } catch {
       setPhotoError('Photo analysis failed. Retry or use manual entry.');
+      setPhotoStage('failed');
       if (uploadedImageId)
         await api(`/v1/food-analysis/image/${uploadedImageId}`, {
           method: 'DELETE',
@@ -469,6 +499,7 @@ export default function Index() {
     }
   };
   const discardAnalysis = async () => {
+    setPhotoStage('discarding');
     if (analysisId) {
       await api(`/v1/food-analysis/${analysisId}`, {
         method: 'DELETE',
@@ -482,9 +513,12 @@ export default function Index() {
     setAnalysis(null);
     setAnalysisId(null);
     setTemporaryImageId(null);
+    setPhotoStage('idle');
   };
   const confirmAnalysis = async () => {
     if (!analysis || !analysisId) return;
+    setPhotoStage('confirming');
+    setPhotoBusy(true);
     try {
       await api('/v1/food-analysis/confirm', {
         method: 'POST',
@@ -502,9 +536,13 @@ export default function Index() {
       setAnalysis(null);
       setAnalysisId(null);
       setTemporaryImageId(null);
+      setPhotoStage('idle');
       await load();
     } catch {
       setError('The analyzed food could not be added.');
+      setPhotoStage('reviewing');
+    } finally {
+      setPhotoBusy(false);
     }
   };
   return (
@@ -513,6 +551,11 @@ export default function Index() {
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
     >
       <Text style={styles.title}>Today</Text>
+      <Text style={styles.muted}>
+        {lastDataRefresh
+          ? `Last refreshed ${lastDataRefresh.toLocaleTimeString()}${Date.now() - lastDataRefresh.getTime() > 5 * 60 * 1000 ? ' · data may be stale' : ''}`
+          : 'Daily data has not loaded yet.'}
+      </Text>
       {error && (
         <View style={styles.error}>
           <Text>{error}</Text>
@@ -780,6 +823,7 @@ export default function Index() {
         </Text>
       )}
       {profileError && <Text style={styles.errorText}>{profileError}</Text>}
+      {profileSaved && <Text>Profile and target saved.</Text>}
       <Button
         title={profileBusy ? 'Saving…' : 'Save profile and target'}
         onPress={saveProfile}
@@ -855,6 +899,21 @@ export default function Index() {
       <Text style={styles.muted}>
         Camera: {cameraPermission} · Gallery: {galleryPermission}
       </Text>
+      {(cameraPermission === 'denied' ||
+        cameraPermission === 'unavailable') && (
+        <Text style={styles.muted}>
+          Camera access is unavailable. Choose an existing image or use manual
+          nutrition entry.
+        </Text>
+      )}
+      {(galleryPermission === 'denied' ||
+        galleryPermission === 'unavailable') && (
+        <Text style={styles.muted}>
+          Gallery access is unavailable. Take a photo or use manual nutrition
+          entry.
+        </Text>
+      )}
+      <Text style={styles.muted}>Photo status: {photoStage}</Text>
       {imageUri && <Text style={styles.muted}>Photo selected.</Text>}
       {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
       {photoError && <Text style={styles.errorText}>{photoError}</Text>}
@@ -879,6 +938,44 @@ export default function Index() {
             keyboardType="decimal-pad"
             style={styles.input}
           />
+          <TextInput
+            value={String(analysis.proteinGrams)}
+            onChangeText={(value) =>
+              setAnalysis({ ...analysis, proteinGrams: Number(value) || 0 })
+            }
+            placeholder="Protein (g)"
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
+          <TextInput
+            value={String(analysis.carbohydrateGrams)}
+            onChangeText={(value) =>
+              setAnalysis({
+                ...analysis,
+                carbohydrateGrams: Number(value) || 0,
+              })
+            }
+            placeholder="Carbohydrates (g)"
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
+          <TextInput
+            value={String(analysis.fatGrams)}
+            onChangeText={(value) =>
+              setAnalysis({ ...analysis, fatGrams: Number(value) || 0 })
+            }
+            placeholder="Fat (g)"
+            keyboardType="decimal-pad"
+            style={styles.input}
+          />
+          <TextInput
+            value={analysis.portionDescription}
+            onChangeText={(portionDescription) =>
+              setAnalysis({ ...analysis, portionDescription })
+            }
+            placeholder="Estimated portion"
+            style={styles.input}
+          />
           <Text>
             {analysis.calories} kcal · confidence{' '}
             {(analysis.confidence * 100).toFixed(0)}%
@@ -889,8 +986,18 @@ export default function Index() {
             Detected:{' '}
             {analysis.detectedItems.map((item) => item.name).join(', ')}
           </Text>
-          <Button title="Confirm and add" onPress={confirmAnalysis} />
-          <Button title="Discard" onPress={discardAnalysis} />
+          <Button
+            title={
+              photoStage === 'confirming' ? 'Confirming…' : 'Confirm and add'
+            }
+            onPress={confirmAnalysis}
+            disabled={photoBusy}
+          />
+          <Button
+            title={photoStage === 'discarding' ? 'Discarding…' : 'Discard'}
+            onPress={discardAnalysis}
+            disabled={photoBusy}
+          />
         </View>
       )}
     </ScrollView>
@@ -909,8 +1016,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#eef5ef',
     borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginTop: 16,
     padding: 16,
   },

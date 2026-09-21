@@ -6,6 +6,7 @@
 - Profile and nutrition-goal endpoints with validation and fixed-point hundredths storage.
 - Nutrition food creation/listing and meal CRUD with ownership checks, timezone-aware daily totals, and meal-item replacement in database and in-memory repositories.
 - Mobile profile editing covers timezone, age, sex, height, weight, activity, goal, estimated targets, and a visible manual calorie override. Today supports full macro entry, quantity and meal-time editing, deletion confirmation, reusable foods, and immediate target progress refresh.
+- Mobile network and permission actions expose loading, validation, failure, retry/fallback, last-refresh or last-sync information. Photo analysis shows selecting, uploading, analyzing, reviewing/editing, confirming, discarding, and failed states while preserving editable results after confirmation failure.
 - Daily steps table with a unique `(user_id, day)` constraint and atomic non-decreasing upsert. The API accepts validated client totals and source metadata; it does not attempt to read a phone sensor.
 - Mobile foreground/resume synchronization through the Expo SDK 52-compatible `expo-sensors` Pedometer API, with device-local permission handling, daily totals, and manual fallback. The API does not read a server-side sensor.
 - Camera/gallery capture uses Expo ImagePicker with permission, cancel, retry, preview, and unavailable-device states. The mobile app copies selected media to cache, uploads bounded image bytes rather than a device-only URI, and deletes the cache copy.
