@@ -13,6 +13,8 @@ import { z } from 'zod';
 
 const uploadSchema = providerInputSchema;
 const analyzeSchema = z.object({ temporaryImageId: z.string().uuid() });
+const imageParamsSchema = z.object({ temporaryImageId: z.string().uuid() });
+const analysisParamsSchema = z.object({ analysisId: z.string().uuid() });
 const confirmSchema = z.object({
   analysisId: z.string().uuid(),
   result: analysisResultSchema,
@@ -78,20 +80,20 @@ export function registerAnalysisRoutes(
   app.delete(
     '/v1/food-analysis/image/:temporaryImageId',
     async (request, reply) => {
+      const params = imageParamsSchema.safeParse(request.params);
+      if (!params.success)
+        return reply.code(400).send({ error: 'invalid_image_id' });
       const ownerId = (await requireCurrentUser(dependencies.auth)).id;
-      temporaryImages.delete(
-        (request.params as { temporaryImageId: string }).temporaryImageId,
-        ownerId,
-      );
+      temporaryImages.delete(params.data.temporaryImageId, ownerId);
       return reply.code(204).send();
     },
   );
   app.delete('/v1/food-analysis/:analysisId', async (request, reply) => {
+    const params = analysisParamsSchema.safeParse(request.params);
+    if (!params.success)
+      return reply.code(400).send({ error: 'invalid_analysis_id' });
     const ownerId = (await requireCurrentUser(dependencies.auth)).id;
-    const discarded = reviews.discard(
-      (request.params as { analysisId: string }).analysisId,
-      ownerId,
-    );
+    const discarded = reviews.discard(params.data.analysisId, ownerId);
     return discarded
       ? reply.code(204).send()
       : reply.code(404).send({ error: 'analysis_not_found' });

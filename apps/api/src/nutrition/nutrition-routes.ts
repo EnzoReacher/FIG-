@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 
 const daySchema = z.string().date();
+const idParamsSchema = z.object({ id: z.string().uuid() });
 function zonedMidnight(day: string, timezone: string) {
   const utcGuess = new Date(`${day}T00:00:00.000Z`);
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -114,13 +115,15 @@ export function registerNutritionRoutes(
     };
   });
   app.patch('/v1/meals/:id', async (request, reply) => {
+    const params = idParamsSchema.safeParse(request.params);
+    if (!params.success) return invalid(reply, params.error);
     const parsed = mealPatchSchema.safeParse(request.body);
     if (!parsed.success) return invalid(reply, parsed.error);
     let meal;
     try {
       meal = await dependencies.nutrition.updateMeal(
         (await requireCurrentUser(dependencies.auth)).id,
-        (request.params as { id: string }).id,
+        params.data.id,
         parsed.data,
       );
     } catch (error) {
@@ -131,9 +134,11 @@ export function registerNutritionRoutes(
     return meal ? { meal } : reply.code(404).send({ error: 'meal_not_found' });
   });
   app.delete('/v1/meals/:id', async (request, reply) => {
+    const params = idParamsSchema.safeParse(request.params);
+    if (!params.success) return invalid(reply, params.error);
     const ok = await dependencies.nutrition.deleteMeal(
       (await requireCurrentUser(dependencies.auth)).id,
-      (request.params as { id: string }).id,
+      params.data.id,
     );
     return ok
       ? reply.code(204).send()

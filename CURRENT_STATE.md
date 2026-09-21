@@ -19,7 +19,7 @@
 
 ## Verification
 
-The latest audit covers route, repository, confirmation idempotency, non-decreasing step totals, fixed-point nutrition, ownership, not-found behavior, meal replacement, DST day bounds, confirmation/discard, expiry, cleanup, temporary byte uploads, and API client-sync behavior.
+The latest audit covers route success and validation failures, malformed JSON, UUID/date/timezone validation, repository behavior, confirmation idempotency, non-decreasing step totals, fixed-point nutrition, ownership isolation, not-found behavior, meal replacement, DST day bounds, confirmation/discard, expiry, cleanup, temporary byte uploads, and API client-sync behavior.
 
 ## Blockers and limitations
 

@@ -4,7 +4,20 @@ const optionalPositiveInt = z.number().int().positive();
 
 export const profilePatchSchema = z
   .object({
-    timezone: z.string().trim().min(1).max(64).optional(),
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .refine((timezone) => {
+        try {
+          new Intl.DateTimeFormat('en', { timeZone: timezone });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Use a valid IANA timezone')
+      .optional(),
     locale: z.string().trim().min(2).max(16).optional(),
     units: z.enum(['metric', 'imperial']).optional(),
     age: optionalPositiveInt.max(120).nullable().optional(),
@@ -24,10 +37,7 @@ export const profilePatchSchema = z
 
 export const nutritionGoalPatchSchema = z
   .object({
-    effectiveDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
-      .optional(),
+    effectiveDate: z.string().date('Use a valid YYYY-MM-DD date').optional(),
     calorieTarget: z.number().int().min(800).max(10000).optional(),
     proteinTargetGrams: z.number().positive().max(1000).optional(),
     carbohydrateTargetGrams: z.number().positive().max(1500).optional(),

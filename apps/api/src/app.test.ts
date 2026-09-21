@@ -18,6 +18,24 @@ describe('health endpoint', () => {
     expect(response.json()).toEqual({ status: 'ok' });
     await app.close();
   });
+
+  it('rejects malformed JSON without exposing internals', async () => {
+    const app = buildApp({
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+    });
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/profile',
+      headers: { 'content-type': 'application/json' },
+      payload: '{broken',
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toHaveProperty('error');
+    await app.close();
+  });
 });
 
 describe('authentication boundary', () => {
@@ -134,6 +152,34 @@ describe('development profile endpoint', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().profile.age).toBe(31);
+    await app.close();
+  });
+
+  it('rejects invalid timezone and effective dates', async () => {
+    const app = buildApp({
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/v1/profile',
+          payload: { timezone: '../not-a-timezone' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/v1/nutrition-goal',
+          payload: { effectiveDate: '2026-99-99', calorieTarget: 2000 },
+        })
+      ).statusCode,
+    ).toBe(400);
     await app.close();
   });
 
@@ -364,6 +410,69 @@ describe('nutrition and step routes', () => {
       (await app.inject({ method: 'DELETE', url: `/v1/meals/${id}` }))
         .statusCode,
     ).toBe(204);
+    expect(
+      (
+        await app.inject({ method: 'GET', url: '/v1/meals?date=2026-01-01' })
+      ).json().meals,
+    ).toHaveLength(0);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/v1/meals/not-a-uuid',
+          payload: { name: 'Invalid' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    await app.close();
+  });
+
+  it('prevents cross-user food and meal access', async () => {
+    const nutrition = createInMemoryNutritionRepository();
+    const userA = crypto.randomUUID();
+    const userB = crypto.randomUUID();
+    const food = await nutrition.createFood(userA, {
+      name: 'Private food',
+      calories: 100,
+      proteinGrams: 1,
+      carbohydrateGrams: 2,
+      fatGrams: 3,
+    });
+    const meal = await nutrition.createMeal(userA, {
+      name: 'Private meal',
+      eatenAt: '2026-01-01T12:00:00.000Z',
+      items: [{ foodId: food.id, quantity: 1 }],
+    });
+    const app = buildApp({
+      auth: { getCurrentUser: async () => ({ id: userB }) },
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(userB),
+        goal: null,
+      }),
+      nutrition,
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/meals',
+          payload: {
+            name: 'Stolen',
+            eatenAt: '2026-01-01T13:00:00.000Z',
+            items: [{ foodId: food.id, quantity: 1 }],
+          },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: `/v1/meals/${meal.meal.id}`,
+          payload: { name: 'Changed' },
+        })
+      ).statusCode,
+    ).toBe(404);
     expect(
       (
         await app.inject({ method: 'GET', url: '/v1/meals?date=2026-01-01' })
