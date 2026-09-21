@@ -8,6 +8,7 @@ import { createInMemoryProfileRepository } from './profile/profile-repository.js
 import { createInMemoryNutritionRepository } from './nutrition/nutrition-repository.js';
 import { MockStepSource } from './steps/step-source.js';
 import { createInMemoryStepRepository } from './steps/step-repository.js';
+import { MockFoodAnalysisProvider } from './analysis/analysis-provider.js';
 
 describe('health endpoint', () => {
   it('reports API availability without domain dependencies', async () => {
@@ -243,6 +244,43 @@ describe('nutrition and step routes', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().steps.steps).toBe(1234);
+    await app.close();
+  });
+
+  it('keeps photo analysis out of meal totals until confirmation', async () => {
+    const nutrition = createInMemoryNutritionRepository();
+    const app = buildApp({
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+      nutrition,
+      analysis: new MockFoodAnalysisProvider(),
+    });
+    const upload = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/upload',
+      payload: { imageUri: 'file:///tmp/salad.jpg' },
+    });
+    const analyzed = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis',
+      payload: { temporaryImageId: upload.json().temporaryImageId },
+    });
+    expect(analyzed.json().confirmed).toBe(false);
+    expect(
+      (await app.inject({ method: 'GET', url: '/v1/meals' })).json().meals,
+    ).toHaveLength(0);
+    const confirmed = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/confirm',
+      payload: {
+        imageUrl: 'file:///tmp/salad.jpg',
+        result: analyzed.json().result,
+        eatenAt: '2026-01-01T12:00:00.000Z',
+      },
+    });
+    expect(confirmed.statusCode).toBe(200);
     await app.close();
   });
 });
