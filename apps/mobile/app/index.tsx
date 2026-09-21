@@ -113,6 +113,7 @@ export default function Index() {
   const [mealTime, setMealTime] = useState(new Date().toISOString());
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [temporaryImageId, setTemporaryImageId] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [cameraPermission, setCameraPermission] =
     useState<DevicePermission>('unknown');
   const [galleryPermission, setGalleryPermission] =
@@ -123,6 +124,15 @@ export default function Index() {
     proteinGrams: number;
     carbohydrateGrams: number;
     fatGrams: number;
+    schemaVersion: '1';
+    providerName: string;
+    modelName: string;
+    portionDescription: string;
+    detectedItems: Array<{
+      name: string;
+      portionDescription: string;
+      confidence: number;
+    }>;
     confidence: number;
     assumptions: string[];
   } | null>(null);
@@ -365,28 +375,50 @@ export default function Index() {
   const analyze = async () => {
     if (!imageUri) return;
     let temporaryUri: string | null = null;
+    let uploadedImageId: string | null = null;
     setPhotoBusy(true);
     setPhotoError(null);
     try {
       temporaryUri = `${FileSystem.cacheDirectory}forge-food-${Date.now()}.jpg`;
       await FileSystem.copyAsync({ from: imageUri, to: temporaryUri });
+      const info = await FileSystem.getInfoAsync(temporaryUri);
+      if (!info.exists || !info.size || info.size > 5 * 1024 * 1024)
+        throw new Error('invalid_image_size');
+      const bytesBase64 = await FileSystem.readAsStringAsync(temporaryUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
       const upload = await api<{ temporaryImageId: string }>(
         '/v1/food-analysis/upload',
-        { method: 'POST', body: JSON.stringify({ imageUri: temporaryUri }) },
-      );
-      const result = await api<{ result: typeof analysis }>(
-        '/v1/food-analysis',
         {
           method: 'POST',
-          body: JSON.stringify({ temporaryImageId: upload.temporaryImageId }),
+          body: JSON.stringify({
+            mediaType: 'image/jpeg',
+            bytesBase64,
+            sizeBytes: info.size,
+          }),
         },
       );
+      uploadedImageId = upload.temporaryImageId;
       setTemporaryImageId(upload.temporaryImageId);
+      const result = await api<{
+        analysisId: string;
+        result: typeof analysis;
+      }>('/v1/food-analysis', {
+        method: 'POST',
+        body: JSON.stringify({ temporaryImageId: upload.temporaryImageId }),
+      });
+      setAnalysisId(result.analysisId);
       setAnalysis(result.result);
+      setTemporaryImageId(null);
       await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
       setImageUri(null);
     } catch {
       setPhotoError('Photo analysis failed. Retry or use manual entry.');
+      if (uploadedImageId)
+        await api(`/v1/food-analysis/image/${uploadedImageId}`, {
+          method: 'DELETE',
+        }).catch(() => undefined);
+      setTemporaryImageId(null);
       if (temporaryUri)
         await FileSystem.deleteAsync(temporaryUri, { idempotent: true });
     } finally {
@@ -437,21 +469,27 @@ export default function Index() {
     }
   };
   const discardAnalysis = async () => {
+    if (analysisId) {
+      await api(`/v1/food-analysis/${analysisId}`, {
+        method: 'DELETE',
+      }).catch(() => undefined);
+    }
     if (temporaryImageId) {
-      await api(`/v1/food-analysis/${temporaryImageId}`, {
+      await api(`/v1/food-analysis/image/${temporaryImageId}`, {
         method: 'DELETE',
       }).catch(() => undefined);
     }
     setAnalysis(null);
+    setAnalysisId(null);
     setTemporaryImageId(null);
   };
   const confirmAnalysis = async () => {
-    if (!analysis) return;
+    if (!analysis || !analysisId) return;
     try {
       await api('/v1/food-analysis/confirm', {
         method: 'POST',
         body: JSON.stringify({
-          temporaryImageId,
+          analysisId,
           result: {
             ...analysis,
             proteinGrams: analysis.proteinGrams,
@@ -462,6 +500,7 @@ export default function Index() {
         }),
       });
       setAnalysis(null);
+      setAnalysisId(null);
       setTemporaryImageId(null);
       await load();
     } catch {
@@ -845,6 +884,11 @@ export default function Index() {
             {(analysis.confidence * 100).toFixed(0)}%
           </Text>
           <Text>{analysis.assumptions.join(' ')}</Text>
+          <Text>Estimated portion: {analysis.portionDescription}</Text>
+          <Text>
+            Detected:{' '}
+            {analysis.detectedItems.map((item) => item.name).join(', ')}
+          </Text>
           <Button title="Confirm and add" onPress={confirmAnalysis} />
           <Button title="Discard" onPress={discardAnalysis} />
         </View>

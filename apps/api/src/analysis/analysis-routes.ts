@@ -2,13 +2,22 @@ import type { FastifyInstance } from 'fastify';
 import type { AuthAdapter } from '../auth/auth-adapter.js';
 import type { NutritionRepository } from '../nutrition/nutrition-repository.js';
 import type { FoodAnalysisProvider } from './analysis-provider.js';
-import { analysisResultSchema } from './analysis-provider.js';
+import {
+  analysisResultSchema,
+  providerInputSchema,
+} from './analysis-provider.js';
+import { createAnalysisReviewStore } from './analysis-review-store.js';
 import { createTemporaryImageStore } from './temporary-image-store.js';
 import { z } from 'zod';
 
-const uploadSchema = z.object({
-  imageUri: z.string().url().or(z.string().startsWith('file://')),
+const uploadSchema = providerInputSchema;
+const analyzeSchema = z.object({ temporaryImageId: z.string().uuid() });
+const confirmSchema = z.object({
+  analysisId: z.string().uuid(),
+  result: analysisResultSchema,
+  eatenAt: z.string().datetime({ offset: true }),
 });
+
 export function registerAnalysisRoutes(
   app: FastifyInstance,
   dependencies: {
@@ -18,65 +27,96 @@ export function registerAnalysisRoutes(
   },
 ) {
   const temporaryImages = createTemporaryImageStore();
+  const reviews = createAnalysisReviewStore();
   app.post('/v1/food-analysis/upload', async (request, reply) => {
     const parsed = uploadSchema.safeParse(request.body);
     if (!parsed.success)
-      return reply.code(400).send({ error: 'image_required' });
-    const image = temporaryImages.put(parsed.data.imageUri);
+      return reply.code(400).send({ error: 'invalid_image_upload' });
+    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const image = temporaryImages.put({ ownerId, ...parsed.data });
     return {
       temporaryImageId: image.id,
       expiresAt: new Date(image.expiresAt).toISOString(),
     };
   });
   app.post('/v1/food-analysis', async (request, reply) => {
-    const body = request.body as {
-      imageUrl?: string;
-      temporaryImageId?: string;
-    };
-    const imageUrl = body?.temporaryImageId
-      ? temporaryImages.get(body.temporaryImageId)
-      : body?.imageUrl;
-    if (!imageUrl) return reply.code(400).send({ error: 'image_required' });
-    let result;
+    const parsed = analyzeSchema.safeParse(request.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: 'invalid_analysis_request' });
+    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const image = temporaryImages.take(parsed.data.temporaryImageId, ownerId);
+    if (!image)
+      return reply.code(404).send({ error: 'temporary_image_not_found' });
     try {
-      result = await dependencies.provider.analyze(imageUrl);
-    } finally {
-      if (body.temporaryImageId) temporaryImages.delete(body.temporaryImageId);
+      const result = analysisResultSchema.parse(
+        await dependencies.provider.analyze({
+          mediaType: image.mediaType,
+          bytesBase64: image.bytesBase64,
+          sizeBytes: image.sizeBytes,
+        }),
+      );
+      const review = reviews.put(ownerId, result);
+      return {
+        analysisId: review.id,
+        expiresAt: new Date(review.expiresAt).toISOString(),
+        result,
+        reviewStatus: review.status,
+        confirmed: false,
+        temporaryImageDeleted: true,
+      };
+    } catch {
+      return reply.code(502).send({ error: 'analysis_failed' });
     }
-    return {
-      result: analysisResultSchema.parse(result),
-      confirmed: false,
-      temporaryImageDeleted: Boolean(body.temporaryImageId),
-    };
   });
-  app.delete('/v1/food-analysis/:temporaryImageId', async (request, reply) => {
-    temporaryImages.delete(
-      (request.params as { temporaryImageId: string }).temporaryImageId,
+  app.delete(
+    '/v1/food-analysis/image/:temporaryImageId',
+    async (request, reply) => {
+      const ownerId = (await dependencies.auth.getCurrentUser()).id;
+      temporaryImages.delete(
+        (request.params as { temporaryImageId: string }).temporaryImageId,
+        ownerId,
+      );
+      return reply.code(204).send();
+    },
+  );
+  app.delete('/v1/food-analysis/:analysisId', async (request, reply) => {
+    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const discarded = reviews.discard(
+      (request.params as { analysisId: string }).analysisId,
+      ownerId,
     );
-    return reply.code(204).send();
+    return discarded
+      ? reply.code(204).send()
+      : reply.code(404).send({ error: 'analysis_not_found' });
   });
   app.post('/v1/food-analysis/confirm', async (request, reply) => {
-    const body = request.body as {
-      imageUrl?: string;
-      temporaryImageId?: string;
-      result?: unknown;
-      eatenAt?: string;
-    };
-    const parsed = analysisResultSchema.safeParse(body?.result);
+    const parsed = confirmSchema.safeParse(request.body);
     if (!parsed.success)
-      return reply
-        .code(400)
-        .send({ error: 'invalid_analysis', issues: parsed.error.issues });
-    if (!body.eatenAt)
-      return reply.code(400).send({ error: 'confirmation_data_required' });
-    const userId = (await dependencies.auth.getCurrentUser()).id;
-    const food = await dependencies.nutrition.createFood(userId, parsed.data);
-    const meal = await dependencies.nutrition.createMeal(userId, {
-      name: parsed.data.name,
-      eatenAt: body.eatenAt,
-      items: [{ foodId: food.id, quantity: 1 }],
-    });
-    if (body.temporaryImageId) temporaryImages.delete(body.temporaryImageId);
-    return { meal, temporaryImageDeleted: true };
+      return reply.code(400).send({ error: 'invalid_confirmation' });
+    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const review = reviews.get(parsed.data.analysisId, ownerId);
+    if (!review || review.status === 'discarded')
+      return reply.code(404).send({ error: 'analysis_not_found' });
+    if (review.status === 'confirmed')
+      return { meal: review.meal, confirmed: true, idempotent: true };
+    if (review.status === 'confirming')
+      return reply.code(409).send({ error: 'confirmation_in_progress' });
+    reviews.claim(parsed.data.analysisId, ownerId);
+    try {
+      const food = await dependencies.nutrition.createFood(
+        ownerId,
+        parsed.data.result,
+      );
+      const meal = await dependencies.nutrition.createMeal(ownerId, {
+        name: parsed.data.result.name,
+        eatenAt: parsed.data.eatenAt,
+        items: [{ foodId: food.id, quantity: 1 }],
+      });
+      reviews.confirm(parsed.data.analysisId, ownerId, meal);
+      return { meal, confirmed: true, idempotent: false };
+    } catch (error) {
+      reviews.release(parsed.data.analysisId, ownerId);
+      throw error;
+    }
   });
 }

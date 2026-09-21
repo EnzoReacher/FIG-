@@ -17,7 +17,7 @@ export function buildApp(dependencies?: {
   steps?: StepRepository;
   analysis?: FoodAnalysisProvider;
 }) {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 7 * 1024 * 1024 });
 
   app.get('/health', async () => ({ status: 'ok' as const }));
 

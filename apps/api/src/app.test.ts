@@ -364,8 +364,23 @@ describe('nutrition and step routes', () => {
     const upload = await app.inject({
       method: 'POST',
       url: '/v1/food-analysis/upload',
-      payload: { imageUri: 'file:///tmp/salad.jpg' },
+      payload: {
+        mediaType: 'image/jpeg',
+        bytesBase64: 'c2FsYWQ=',
+        sizeBytes: 5,
+      },
     });
+    expect(upload.statusCode).toBe(200);
+    const invalidUpload = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/upload',
+      payload: {
+        mediaType: 'text/plain',
+        bytesBase64: 'not base64!',
+        sizeBytes: 4,
+      },
+    });
+    expect(invalidUpload.statusCode).toBe(400);
     const analyzed = await app.inject({
       method: 'POST',
       url: '/v1/food-analysis',
@@ -379,24 +394,44 @@ describe('nutrition and step routes', () => {
       method: 'POST',
       url: '/v1/food-analysis/confirm',
       payload: {
-        imageUrl: 'file:///tmp/salad.jpg',
+        analysisId: analyzed.json().analysisId,
         result: analyzed.json().result,
         eatenAt: '2026-01-01T12:00:00.000Z',
       },
     });
     expect(confirmed.statusCode).toBe(200);
-    expect(confirmed.json().temporaryImageDeleted).toBe(true);
+    expect(confirmed.json().idempotent).toBe(false);
+    const repeated = await app.inject({
+      method: 'POST',
+      url: '/v1/food-analysis/confirm',
+      payload: {
+        analysisId: analyzed.json().analysisId,
+        result: analyzed.json().result,
+        eatenAt: '2026-01-01T12:00:00.000Z',
+      },
+    });
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json().idempotent).toBe(true);
+    expect(
+      (
+        await app.inject({ method: 'GET', url: '/v1/meals?date=2026-01-01' })
+      ).json().meals,
+    ).toHaveLength(1);
     const discarded = await app.inject({
       method: 'POST',
       url: '/v1/food-analysis/upload',
-      payload: { imageUri: 'file:///tmp/discard.jpg' },
+      payload: {
+        mediaType: 'image/jpeg',
+        bytesBase64: 'ZGlzY2FyZA==',
+        sizeBytes: 7,
+      },
     });
     const discardedId = discarded.json().temporaryImageId;
     expect(
       (
         await app.inject({
           method: 'DELETE',
-          url: `/v1/food-analysis/${discardedId}`,
+          url: `/v1/food-analysis/image/${discardedId}`,
         })
       ).statusCode,
     ).toBe(204);
@@ -408,7 +443,7 @@ describe('nutrition and step routes', () => {
           payload: { temporaryImageId: discardedId },
         })
       ).statusCode,
-    ).toBe(400);
+    ).toBe(404);
     await app.close();
   });
 
@@ -416,6 +451,8 @@ describe('nutrition and step routes', () => {
     const app = buildApp({
       nutrition: createInMemoryNutritionRepository(),
       analysis: {
+        name: 'failing-test-provider',
+        model: 'fixture',
         analyze: async () => {
           throw new Error('provider_failed');
         },
@@ -424,7 +461,11 @@ describe('nutrition and step routes', () => {
     const upload = await app.inject({
       method: 'POST',
       url: '/v1/food-analysis/upload',
-      payload: { imageUri: 'file:///tmp/failure.jpg' },
+      payload: {
+        mediaType: 'image/jpeg',
+        bytesBase64: 'ZmFpbHVyZQ==',
+        sizeBytes: 7,
+      },
     });
     const id = upload.json().temporaryImageId;
     expect(
@@ -435,7 +476,7 @@ describe('nutrition and step routes', () => {
           payload: { temporaryImageId: id },
         })
       ).statusCode,
-    ).toBe(500);
+    ).toBe(502);
     expect(
       (
         await app.inject({
@@ -444,7 +485,7 @@ describe('nutrition and step routes', () => {
           payload: { temporaryImageId: id },
         })
       ).statusCode,
-    ).toBe(400);
+    ).toBe(404);
     await app.close();
   });
 });
