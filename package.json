@@ -5,6 +5,7 @@
   "scripts": {
     "dev:api": "pnpm --filter @forge/api dev",
     "dev:mobile": "pnpm --filter @forge/mobile start",
+    "db:generate": "pnpm --filter @forge/api db:generate",
     "db:migrate": "pnpm --filter @forge/api db:migrate",
     "test": "vitest run",
     "typecheck": "pnpm -r --if-present typecheck",

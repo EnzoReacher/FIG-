@@ -13,5 +13,8 @@ describe('steps', () => {
     expect((await repository.sync('user', '2026-01-01', 1500)).steps).toBe(
       1500,
     );
+    expect(
+      (await repository.sync('user', '2026-01-01', 1600, 'manual')).source,
+    ).toBe('manual');
   });
 });

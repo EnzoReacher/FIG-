@@ -2,83 +2,24 @@
 
 ## Completed
 
-- Renamed the stable branch from `master` to `main`.
-- Created and switched to `task/m0-foundation`.
-- Added the pnpm monorepo foundation and generated `pnpm-lock.yaml`.
-- Added Fastify API shell with an independent `/health` endpoint.
-- Added Expo Router mobile shell and verified its Expo configuration.
-- Added local PostgreSQL Docker Compose configuration.
-- Added Drizzle migration tooling and the first application migration for users, profiles, and nutrition goals.
-- Added a deterministic seeded development user and development authentication adapter.
-- Added authenticated `GET /v1/profile` and `PATCH /v1/profile` routes with Zod-validated profile updates.
-- Added `GET /v1/nutrition-goal` and `PATCH /v1/nutrition-goal`, with Mifflin–St Jeor calculations, macro defaults, and manual calorie-target overrides.
-- Added nutrition foods, meals, meal items, fixed-point hundredths storage, timezone-aware daily totals, validated CRUD routes, and in-memory repository coverage.
-- Added a functional Expo Today dashboard with API-backed meals, calorie/macro totals, manual food entry, delete action, loading, retry, and unavailable API states.
-- Added daily steps persistence, StepSource and mock source interfaces, idempotent synchronization routes, permission/unavailable responses, and dashboard step states.
-- Added provider-isolated food analysis API with strict Zod result validation, deterministic mock fixtures, confidence/assumption fields, editable mobile review, explicit confirmation, and manual fallback.
-- Added project documentation and ADR decision records.
-- Confirmed the database contains exactly the three approved foundation tables after migration.
+- Monorepo foundation, Fastify API, Expo Router app, local PostgreSQL, Drizzle, and development authentication.
+- Profile and nutrition-goal endpoints with validation and fixed-point hundredths storage.
+- Nutrition food creation/listing and meal CRUD with ownership checks, timezone-aware daily totals, and meal-item replacement in database and in-memory repositories.
+- Daily steps table with a unique `(user_id, day)` constraint and atomic non-decreasing upsert. The API accepts validated client totals and source metadata; it does not attempt to read a phone sensor.
+- Mobile foreground/resume synchronization through the Expo SDK 52-compatible `expo-sensors` Pedometer API, while preserving denied/unavailable states.
+- Deterministic mock food analysis with visible confidence and assumptions, editable review, explicit confirmation, and a temporary image upload contract.
+- No real AI provider, provider secret, or Forge-Gym-V2 file has been added or changed.
 
-## Files changed
+## Actual database tables
 
-Added or updated API database schema, migrations, nutrition, step, and analysis repositories/routes/tests, profile repository/routes, validation, API tests, and the mobile dashboard. No real AI provider, provider secret, or Forge-Gym-V2 file was added or changed.
+`users`, `profiles`, `nutrition_goals`, `foods`, `meals`, `meal_items`, and `daily_steps`.
 
 ## Verification
 
-All commands below passed:
+The latest audit added route, repository, idempotency, non-decreasing-total, fixed-point, ownership, and not-found coverage. The required verification commands are run for the final audit and recorded in the handoff.
 
-- `pnpm install` — passed after approving local esbuild dependency build scripts; generated the lockfile.
-- `pnpm install --frozen-lockfile` — passed.
-- `docker compose up -d --wait postgres` — passed; PostgreSQL became healthy.
-- `pnpm db:migrate` — passed; empty foundation migration applied.
-- `docker compose exec -T postgres psql -U forge -d forge_gym_health -c '\\dt'` — passed; no relations found.
-- `pnpm test` — passed; 1 health endpoint test.
-- `pnpm typecheck` — passed.
-- `pnpm lint` — passed.
-- `pnpm format:check` — passed.
-- `pnpm --filter @forge/mobile exec expo config --json` — passed; Android package resolved as `com.forgegymhealth.app`.
-- API process smoke test with `curl http://localhost:3000/health` — passed with `{\"status\":\"ok\"}`.
-- `pnpm --filter @forge/api db:generate` — passed; generated the users/profiles/nutrition-goals migration.
-- `pnpm db:migrate` — passed; migration and deterministic development-user seed applied.
-- PostgreSQL inspection — passed; exactly `users`, `profiles`, and `nutrition_goals` exist, with one seeded user, profile, and goal.
-- `pnpm test` — passed; 6 API tests covering health, valid profile updates, invalid input, calculated/manual goals, and missing users.
-- `pnpm typecheck` — passed.
-- `pnpm lint` — passed.
-- `pnpm format:check` — passed.
-- `pnpm install --frozen-lockfile` — passed after adding the Zod dependency.
-- `docker compose up -d --wait postgres` — passed.
-- `pnpm db:migrate` — passed; nutrition tables migration applied.
-- `pnpm test` — passed; 8 API/repository tests.
-- `pnpm typecheck` — passed.
-- `pnpm lint` — passed.
-- `pnpm format:check` — passed.
-- `git diff --check` — passed.
-- `pnpm --filter @forge/mobile typecheck` — passed.
-- `pnpm --filter @forge/mobile lint` — passed.
-- `pnpm --filter @forge/api db:generate` — passed for daily steps migration.
-- `pnpm db:migrate` — passed.
-- `pnpm test` — passed; 9 tests.
-- `pnpm test` — passed; 11 tests including malformed-analysis and low-confidence fixture coverage.
+## Blockers and limitations
 
-## Blockers
-
-- Android SDK, Java, adb, and emulator tooling are not installed in the current environment, so real-device mobile verification is not available yet.
-- Expo camera/gallery packages are not installed; analysis currently accepts a temporary image URI rather than device capture.
-
-## Risks
-
-- Expo Pedometer behavior and permission handling require Android-device verification in Milestone 3.
-- Food-photo nutrition remains an estimate and will require explicit confidence, assumptions, editing, and confirmation in later milestones.
-- The mock step source is wired for development; no physical-device Pedometer adapter has been verified.
-- Temporary image deletion is represented by the confirmation contract; durable object-storage cleanup is not implemented.
-
-## Features still incomplete
-
-- Real Expo camera/gallery selection and temporary binary upload/deletion.
-- Full meal detail edit UI and calorie-target display from the goal endpoint.
-- Expo Pedometer adapter and foreground/resume lifecycle wiring.
-- Production authentication, external food-analysis provider, and provider secrets.
-
-## Next task
-
-Next task: replace the temporary image URI control with Expo camera/gallery selection and add upload retention tests; do not add a real AI provider without an explicit provider decision.
+- Android SDK, Java, adb, and an emulator/device are not installed here, so real-device Expo camera, gallery, Pedometer, and permission behavior cannot be verified.
+- Temporary image storage is an in-process contract for development; production object storage, authentication, expiry cleanup, and durable deletion are still required.
+- Food analysis remains deterministic mock estimation. Production authentication, full meal editing UI, and a real analysis provider remain out of scope.
