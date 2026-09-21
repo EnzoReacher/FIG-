@@ -223,6 +223,94 @@ describe('nutrition and step routes', () => {
       payload: { name: 'Nope' },
     });
     expect(missing.statusCode).toBe(404);
+    const invalidFood = await app.inject({
+      method: 'POST',
+      url: '/v1/foods',
+      payload: {
+        name: '',
+        calories: -1,
+        proteinGrams: 0,
+        carbohydrateGrams: 0,
+        fatGrams: 0,
+      },
+    });
+    expect(invalidFood.statusCode).toBe(400);
+    const invalidDate = await app.inject({
+      method: 'GET',
+      url: '/v1/meals?date=not-a-date',
+    });
+    expect(invalidDate.statusCode).toBe(400);
+    const invalidMeal = await app.inject({
+      method: 'POST',
+      url: '/v1/meals',
+      payload: {
+        name: 'Invalid',
+        eatenAt: 'not-a-date',
+        items: [],
+      },
+    });
+    expect(invalidMeal.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('creates, replaces, totals, and deletes a meal through the API', async () => {
+    const nutrition = createInMemoryNutritionRepository();
+    const app = buildApp({
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+      nutrition,
+    });
+    const first = await nutrition.createFood(DEVELOPMENT_USER_ID, {
+      name: 'Rice',
+      calories: 100,
+      proteinGrams: 2,
+      carbohydrateGrams: 20,
+      fatGrams: 1,
+    });
+    const second = await nutrition.createFood(DEVELOPMENT_USER_ID, {
+      name: 'Beans',
+      calories: 80,
+      proteinGrams: 5,
+      carbohydrateGrams: 12,
+      fatGrams: 1,
+    });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/meals',
+      payload: {
+        name: 'Lunch',
+        eatenAt: '2026-01-01T12:00:00.000Z',
+        items: [{ foodId: first.id, quantity: 1.5 }],
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().meal.meal.id;
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/v1/meals/${id}`,
+      payload: {
+        name: 'Updated lunch',
+        items: [{ foodId: second.id, quantity: 2 }],
+      },
+    });
+    expect(updated.json().meal.items).toHaveLength(1);
+    expect(updated.json().meal.items[0].food.name).toBe('Beans');
+    const day = await app.inject({
+      method: 'GET',
+      url: '/v1/meals?date=2026-01-01',
+    });
+    expect(day.json().totals.calories).toBe(160);
+    expect(
+      (await app.inject({ method: 'DELETE', url: `/v1/meals/${id}` }))
+        .statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await app.inject({ method: 'GET', url: '/v1/meals?date=2026-01-01' })
+      ).json().meals,
+    ).toHaveLength(0);
     await app.close();
   });
 

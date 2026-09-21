@@ -50,6 +50,19 @@ const fixedFood = (userId: string, input: FoodInput) => ({
 });
 
 export function createNutritionRepository(db: Database): NutritionRepository {
+  const requireFoods = async (userId: string, inputs: MealInput['items']) => {
+    const result = [];
+    for (const input of inputs) {
+      const [food] = await db
+        .select()
+        .from(foods)
+        .where(and(eq(foods.id, input.foodId), eq(foods.userId, userId)))
+        .limit(1);
+      if (!food) throw new Error('food_not_found');
+      result.push({ input, food });
+    }
+    return result;
+  };
   const getMeal = async (
     userId: string,
     id: string,
@@ -107,17 +120,12 @@ export function createNutritionRepository(db: Database): NutritionRepository {
       return db.select().from(foods).where(eq(foods.userId, userId));
     },
     async createMeal(userId, input) {
+      const resolvedItems = await requireFoods(userId, input.items);
       const [meal] = await db
         .insert(meals)
         .values({ userId, name: input.name, eatenAt: new Date(input.eatenAt) })
         .returning();
-      for (const item of input.items) {
-        const [food] = await db
-          .select()
-          .from(foods)
-          .where(and(eq(foods.id, item.foodId), eq(foods.userId, userId)))
-          .limit(1);
-        if (!food) throw new Error('food_not_found');
+      for (const { input: item, food } of resolvedItems) {
         await db.insert(mealItems).values({
           mealId: meal.id,
           foodId: food.id,
@@ -155,6 +163,7 @@ export function createNutritionRepository(db: Database): NutritionRepository {
     async updateMeal(userId, id, input) {
       const current = await getMeal(userId, id);
       if (!current) return null;
+      if (input.items) await requireFoods(userId, input.items);
       await db
         .update(meals)
         .set({

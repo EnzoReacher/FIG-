@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInMemoryNutritionRepository } from './nutrition-repository.js';
+import { dayBounds } from './nutrition-routes.js';
 
 describe('nutrition repository', () => {
   it('creates and lists foods only for their owner', async () => {
@@ -130,5 +131,36 @@ describe('nutrition repository', () => {
         items: [{ foodId: crypto.randomUUID(), quantity: 1 }],
       }),
     ).rejects.toThrow('food_not_found');
+  });
+
+  it('keeps the original items when replacement validation fails', async () => {
+    const repository = createInMemoryNutritionRepository();
+    const food = await repository.createFood('user', {
+      name: 'Toast',
+      calories: 100,
+      proteinGrams: 3,
+      carbohydrateGrams: 18,
+      fatGrams: 2,
+    });
+    const meal = await repository.createMeal('user', {
+      name: 'Breakfast',
+      eatenAt: '2026-01-01T08:00:00.000Z',
+      items: [{ foodId: food.id, quantity: 1 }],
+    });
+    await expect(
+      repository.updateMeal('user', meal.meal.id, {
+        items: [{ foodId: crypto.randomUUID(), quantity: 1 }],
+      }),
+    ).rejects.toThrow('food_not_found');
+    expect(meal.items.map((item) => item.foodId)).toEqual([food.id]);
+  });
+
+  it('uses timezone midnights including daylight-saving transitions', () => {
+    const spring = dayBounds('2026-03-08', 'America/New_York');
+    expect(spring.start.toISOString()).toBe('2026-03-08T05:00:00.000Z');
+    expect(spring.end.toISOString()).toBe('2026-03-09T04:00:00.000Z');
+    const fall = dayBounds('2026-11-01', 'America/New_York');
+    expect(fall.start.toISOString()).toBe('2026-11-01T04:00:00.000Z');
+    expect(fall.end.toISOString()).toBe('2026-11-02T05:00:00.000Z');
   });
 });

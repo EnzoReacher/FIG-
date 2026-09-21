@@ -7,21 +7,46 @@ import {
   mealInputSchema,
   mealPatchSchema,
 } from './nutrition-validation.js';
+import { z } from 'zod';
 
-function dayBounds(day: string, timezone: string) {
-  const start = new Date(`${day}T00:00:00`);
-  const formatter = new Intl.DateTimeFormat('en-CA', {
+const daySchema = z.string().date();
+function zonedMidnight(day: string, timezone: string) {
+  const utcGuess = new Date(`${day}T00:00:00.000Z`);
+  const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
   });
-  const parts = formatter.formatToParts(start);
-  const localDay = `${parts.find((p) => p.type === 'year')!.value}-${parts.find((p) => p.type === 'month')!.value}-${parts.find((p) => p.type === 'day')!.value}`;
-  const offset = start.getTime() - new Date(`${localDay}T00:00:00Z`).getTime();
+  const values = Object.fromEntries(
+    formatter
+      .formatToParts(utcGuess)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const represented = Date.UTC(
+    values.year,
+    values.month - 1,
+    values.day,
+    values.hour,
+    values.minute,
+    values.second,
+  );
+  return new Date(utcGuess.getTime() - (represented - utcGuess.getTime()));
+}
+function nextDay(day: string) {
+  const date = new Date(`${day}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+export function dayBounds(day: string, timezone: string) {
   return {
-    start: new Date(new Date(`${day}T00:00:00Z`).getTime() + offset),
-    end: new Date(new Date(`${day}T00:00:00Z`).getTime() + offset + 86400000),
+    start: zonedMidnight(day, timezone),
+    end: zonedMidnight(nextDay(day), timezone),
   };
 }
 const invalid = (reply: any, error: any) =>
@@ -74,22 +99,35 @@ export function registerNutritionRoutes(
       new Intl.DateTimeFormat('en-CA', {
         timeZone: profile.profile.timezone,
       }).format(new Date());
-    const bounds = dayBounds(date, profile.profile.timezone);
+    const parsedDate = daySchema.safeParse(date);
+    if (!parsedDate.success) return invalid(reply, parsedDate.error);
+    const bounds = dayBounds(parsedDate.data, profile.profile.timezone);
     const meals = await dependencies.nutrition.listMeals(
       userId,
       bounds.start,
       bounds.end,
     );
-    return { date, meals, totals: dependencies.nutrition.totals(meals) };
+    return {
+      date: parsedDate.data,
+      meals,
+      totals: dependencies.nutrition.totals(meals),
+    };
   });
   app.patch('/v1/meals/:id', async (request, reply) => {
     const parsed = mealPatchSchema.safeParse(request.body);
     if (!parsed.success) return invalid(reply, parsed.error);
-    const meal = await dependencies.nutrition.updateMeal(
-      (await dependencies.auth.getCurrentUser()).id,
-      (request.params as { id: string }).id,
-      parsed.data,
-    );
+    let meal;
+    try {
+      meal = await dependencies.nutrition.updateMeal(
+        (await dependencies.auth.getCurrentUser()).id,
+        (request.params as { id: string }).id,
+        parsed.data,
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === 'food_not_found')
+        return reply.code(404).send({ error: 'food_not_found' });
+      throw error;
+    }
     return meal ? { meal } : reply.code(404).send({ error: 'meal_not_found' });
   });
   app.delete('/v1/meals/:id', async (request, reply) => {
