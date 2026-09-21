@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState, Image } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Pedometer } from 'expo-sensors';
@@ -105,6 +105,12 @@ export default function Index() {
   } | null>(null);
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
+  const [protein, setProtein] = useState('');
+  const [carbohydrates, setCarbohydrates] = useState('');
+  const [fat, setFat] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [mealName, setMealName] = useState('Meal');
+  const [mealTime, setMealTime] = useState(new Date().toISOString());
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [temporaryImageId, setTemporaryImageId] = useState<string | null>(null);
   const [cameraPermission, setCameraPermission] =
@@ -126,6 +132,7 @@ export default function Index() {
   const [manualSteps, setManualSteps] = useState('');
   const [editingMealId, setEditingMealId] = useState<string | null>(null);
   const [editMealName, setEditMealName] = useState('');
+  const [editMealTime, setEditMealTime] = useState('');
   const [editItems, setEditItems] = useState<
     Array<{ foodId: string; quantity: string; name: string }>
   >([]);
@@ -280,22 +287,25 @@ export default function Index() {
         body: JSON.stringify({
           name,
           calories: Number(calories),
-          proteinGrams: 0,
-          carbohydrateGrams: 0,
-          fatGrams: 0,
+          proteinGrams: Number(protein),
+          carbohydrateGrams: Number(carbohydrates),
+          fatGrams: Number(fat),
         }),
       });
-      const now = new Date().toISOString();
       await api('/v1/meals', {
         method: 'POST',
         body: JSON.stringify({
-          name: 'Snack',
-          eatenAt: now,
-          items: [{ foodId: result.food.id, quantity: 1 }],
+          name: mealName,
+          eatenAt: mealTime,
+          items: [{ foodId: result.food.id, quantity: Number(quantity) }],
         }),
       });
       setName('');
       setCalories('');
+      setProtein('');
+      setCarbohydrates('');
+      setFat('');
+      setQuantity('1');
       await load();
     } catch {
       setError(
@@ -373,6 +383,7 @@ export default function Index() {
   const startMealEdit = (meal: Meal) => {
     setEditingMealId(meal.meal.id);
     setEditMealName(meal.meal.name);
+    setEditMealTime(new Date(meal.meal.eatenAt).toISOString());
     setEditItems(
       meal.items.map((item) => ({
         foodId: item.food.id,
@@ -400,7 +411,11 @@ export default function Index() {
     try {
       await api(`/v1/meals/${editingMealId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: editMealName.trim(), items }),
+        body: JSON.stringify({
+          name: editMealName.trim(),
+          eatenAt: editMealTime,
+          items,
+        }),
       });
       setEditingMealId(null);
       await load();
@@ -465,6 +480,16 @@ export default function Index() {
                 ? 'Daily target unavailable'
                 : `of ${calorieTarget} kcal daily target`}
             </Text>
+            {calorieTarget !== null && (
+              <Text>
+                Progress:{' '}
+                {Math.min(
+                  100,
+                  Math.round((today.totals.calories / calorieTarget) * 100),
+                )}
+                %
+              </Text>
+            )}
             <Text style={styles.steps}>
               Steps today: {steps?.steps ?? 0}
               {stepPermission === 'denied'
@@ -499,6 +524,12 @@ export default function Index() {
                       <TextInput
                         value={editMealName}
                         onChangeText={setEditMealName}
+                        style={styles.input}
+                      />
+                      <TextInput
+                        value={editMealTime}
+                        onChangeText={setEditMealTime}
+                        placeholder="Eaten at (ISO date/time)"
                         style={styles.input}
                       />
                       {editItems.map((item, index) => (
@@ -570,12 +601,31 @@ export default function Index() {
                       />
                       <Button
                         title="Delete"
-                        onPress={async () => {
-                          await api(`/v1/meals/${meal.meal.id}`, {
-                            method: 'DELETE',
-                          });
-                          await load();
-                        }}
+                        onPress={() =>
+                          Alert.alert(
+                            'Delete meal?',
+                            'This removes the meal from today’s totals.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  try {
+                                    await api(`/v1/meals/${meal.meal.id}`, {
+                                      method: 'DELETE',
+                                    });
+                                    await load();
+                                  } catch {
+                                    setError(
+                                      'Meal could not be deleted. Retry.',
+                                    );
+                                  }
+                                },
+                              },
+                            ],
+                          )
+                        }
                       />
                     </>
                   )}
@@ -688,6 +738,46 @@ export default function Index() {
         keyboardType="decimal-pad"
         style={styles.input}
       />
+      <TextInput
+        placeholder="Protein (g)"
+        value={protein}
+        onChangeText={setProtein}
+        keyboardType="decimal-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Carbohydrates (g)"
+        value={carbohydrates}
+        onChangeText={setCarbohydrates}
+        keyboardType="decimal-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Fat (g)"
+        value={fat}
+        onChangeText={setFat}
+        keyboardType="decimal-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Quantity"
+        value={quantity}
+        onChangeText={setQuantity}
+        keyboardType="decimal-pad"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Meal name"
+        value={mealName}
+        onChangeText={setMealName}
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Meal time (ISO date/time)"
+        value={mealTime}
+        onChangeText={setMealTime}
+        style={styles.input}
+      />
       <Button
         title="Add to today"
         onPress={addFood}
@@ -705,6 +795,7 @@ export default function Index() {
         Camera: {cameraPermission} · Gallery: {galleryPermission}
       </Text>
       {imageUri && <Text style={styles.muted}>Photo selected.</Text>}
+      {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
       {photoError && <Text style={styles.errorText}>{photoError}</Text>}
       <Button
         title={photoBusy ? 'Analyzing…' : 'Analyze image'}
@@ -786,4 +877,5 @@ const styles = StyleSheet.create({
     minWidth: 80,
     padding: 8,
   },
+  preview: { borderRadius: 8, height: 180, marginVertical: 8, width: '100%' },
 });
