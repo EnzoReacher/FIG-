@@ -22,7 +22,7 @@
 
 The latest audit covers route success and validation failures, malformed JSON, UUID/date/timezone validation, repository behavior, confirmation idempotency, non-decreasing step totals, fixed-point nutrition, ownership isolation, not-found behavior, meal replacement, DST day bounds, confirmation/discard, expiry, cleanup, temporary byte uploads, and API client-sync behavior.
 
-Commands passed during implementation: `pnpm test` (33 tests), `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and `git diff --check`. Final frozen install, migration generation/application, API process smoke test, and artifact/security scans are recorded by the final release audit rather than assumed here.
+Final checks passed: frozen install, no-op schema generation, PostgreSQL migration application, 33 tests, typecheck, lint, formatting, diff validation, artifact/secret scans, and live API smoke requests for health, profile, daily meals, and steps. See `docs/RELEASE_AUDIT.md` for exact evidence and limitations.
 
 ## Blockers and limitations
 
@@ -32,4 +32,4 @@ Commands passed during implementation: `pnpm test` (33 tests), `pnpm typecheck`,
 
 ## Exact next milestone
 
-Run the final release audit, then stop. The owner must make the explicit choices listed in `docs/VISION_PROVIDER_DECISION.md` before any real provider work. Production authentication, object storage, hosted infrastructure, and physical Android verification also remain separate gates.
+Stop at the decision gate. The owner must make the explicit choices listed in `docs/VISION_PROVIDER_DECISION.md` before any real provider work. Production authentication, object storage, hosted infrastructure, and physical Android verification also remain separate gates.
