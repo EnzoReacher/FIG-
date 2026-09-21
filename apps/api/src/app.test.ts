@@ -20,6 +20,64 @@ describe('health endpoint', () => {
   });
 });
 
+describe('authentication boundary', () => {
+  it('returns unauthorized when the adapter has no user', async () => {
+    const app = buildApp({
+      auth: { getCurrentUser: async () => null },
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+      nutrition: createInMemoryNutritionRepository(),
+      steps: createInMemoryStepRepository(),
+      analysis: new MockFoodAnalysisProvider(),
+    });
+    for (const request of [
+      { method: 'GET', url: '/v1/profile' },
+      { method: 'GET', url: '/v1/foods' },
+      { method: 'GET', url: '/v1/steps' },
+      {
+        method: 'POST',
+        url: '/v1/food-analysis/upload',
+        payload: {
+          mediaType: 'image/jpeg',
+          bytesBase64: 'aW1hZ2U=',
+          sizeBytes: 5,
+        },
+      },
+    ] as const) {
+      expect((await app.inject(request)).statusCode).toBe(401);
+    }
+    await app.close();
+  });
+
+  it('ignores client-provided user identifiers', async () => {
+    const nutrition = createInMemoryNutritionRepository();
+    const app = buildApp({
+      nutrition,
+      profiles: createInMemoryProfileRepository({
+        profile: testProfile(DEVELOPMENT_USER_ID),
+        goal: null,
+      }),
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/foods',
+      payload: {
+        userId: crypto.randomUUID(),
+        name: 'Injected identity',
+        calories: 10,
+        proteinGrams: 0,
+        carbohydrateGrams: 0,
+        fatGrams: 0,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().food.userId).toBe(DEVELOPMENT_USER_ID);
+    await app.close();
+  });
+});
+
 describe('development profile endpoint', () => {
   it('uses the seeded development identity', async () => {
     const profile = {

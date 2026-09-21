@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthAdapter } from '../auth/auth-adapter.js';
+import { requireCurrentUser, type AuthAdapter } from '../auth/auth-adapter.js';
 import type { ProfileRepository } from './profile-repository.js';
 import {
   nutritionGoalPatchSchema,
@@ -75,7 +75,7 @@ export function registerProfileRoutes(
 ) {
   app.get('/v1/profile', async (_request, reply) => {
     const view = await dependencies.profiles.get(
-      (await dependencies.auth.getCurrentUser()).id,
+      (await requireCurrentUser(dependencies.auth)).id,
     );
     return view
       ? { profile: view.profile, goal: view.goal }
@@ -86,7 +86,7 @@ export function registerProfileRoutes(
     const parsed = profilePatchSchema.safeParse(request.body);
     if (!parsed.success) return validationError(reply, parsed.error);
     const view = await dependencies.profiles.updateProfile(
-      (await dependencies.auth.getCurrentUser()).id,
+      (await requireCurrentUser(dependencies.auth)).id,
       parsed.data,
     );
     return view
@@ -96,7 +96,7 @@ export function registerProfileRoutes(
 
   app.get('/v1/nutrition-goal', async (_request, reply) => {
     const view = await dependencies.profiles.get(
-      (await dependencies.auth.getCurrentUser()).id,
+      (await requireCurrentUser(dependencies.auth)).id,
     );
     return view
       ? goalResponse(view.profile, view.goal)
@@ -106,7 +106,7 @@ export function registerProfileRoutes(
   app.patch('/v1/nutrition-goal', async (request, reply) => {
     const parsed = nutritionGoalPatchSchema.safeParse(request.body);
     if (!parsed.success) return validationError(reply, parsed.error);
-    const userId = (await dependencies.auth.getCurrentUser()).id;
+    const userId = (await requireCurrentUser(dependencies.auth)).id;
     const current = await dependencies.profiles.get(userId);
     if (!current) return reply.code(404).send({ error: 'profile_not_found' });
     const calculated = explanation(current.profile);

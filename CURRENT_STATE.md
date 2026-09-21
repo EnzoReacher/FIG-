@@ -2,7 +2,7 @@
 
 ## Completed
 
-- Monorepo foundation, Fastify API, Expo Router app, local PostgreSQL, Drizzle, and development authentication.
+- Monorepo foundation, Fastify API, Expo Router app, local PostgreSQL, Drizzle, and a deterministic development identity behind `AuthAdapter`; missing identity returns 401 and client payloads cannot select a user.
 - Profile and nutrition-goal endpoints with validation and fixed-point hundredths storage.
 - Nutrition food creation/listing and meal CRUD with ownership checks, timezone-aware daily totals, and meal-item replacement in database and in-memory repositories.
 - Mobile profile editing covers timezone, age, sex, height, weight, activity, goal, estimated targets, and a visible manual calorie override. Today supports full macro entry, quantity and meal-time editing, deletion confirmation, reusable foods, and immediate target progress refresh.

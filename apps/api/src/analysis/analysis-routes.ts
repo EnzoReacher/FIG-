@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthAdapter } from '../auth/auth-adapter.js';
+import { requireCurrentUser, type AuthAdapter } from '../auth/auth-adapter.js';
 import type { NutritionRepository } from '../nutrition/nutrition-repository.js';
 import type { FoodAnalysisProvider } from './analysis-provider.js';
 import {
@@ -33,7 +33,7 @@ export function registerAnalysisRoutes(
     const parsed = uploadSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ error: 'invalid_image_upload' });
-    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const ownerId = (await requireCurrentUser(dependencies.auth)).id;
     const image = temporaryImages.put({ ownerId, ...parsed.data });
     return {
       temporaryImageId: image.id,
@@ -44,7 +44,7 @@ export function registerAnalysisRoutes(
     const parsed = analyzeSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ error: 'invalid_analysis_request' });
-    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const ownerId = (await requireCurrentUser(dependencies.auth)).id;
     const image = temporaryImages.take(parsed.data.temporaryImageId, ownerId);
     if (!image)
       return reply.code(404).send({ error: 'temporary_image_not_found' });
@@ -78,7 +78,7 @@ export function registerAnalysisRoutes(
   app.delete(
     '/v1/food-analysis/image/:temporaryImageId',
     async (request, reply) => {
-      const ownerId = (await dependencies.auth.getCurrentUser()).id;
+      const ownerId = (await requireCurrentUser(dependencies.auth)).id;
       temporaryImages.delete(
         (request.params as { temporaryImageId: string }).temporaryImageId,
         ownerId,
@@ -87,7 +87,7 @@ export function registerAnalysisRoutes(
     },
   );
   app.delete('/v1/food-analysis/:analysisId', async (request, reply) => {
-    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const ownerId = (await requireCurrentUser(dependencies.auth)).id;
     const discarded = reviews.discard(
       (request.params as { analysisId: string }).analysisId,
       ownerId,
@@ -100,7 +100,7 @@ export function registerAnalysisRoutes(
     const parsed = confirmSchema.safeParse(request.body);
     if (!parsed.success)
       return reply.code(400).send({ error: 'invalid_confirmation' });
-    const ownerId = (await dependencies.auth.getCurrentUser()).id;
+    const ownerId = (await requireCurrentUser(dependencies.auth)).id;
     const review = reviews.get(parsed.data.analysisId, ownerId);
     if (!review || review.status === 'discarded')
       return reply.code(404).send({ error: 'analysis_not_found' });

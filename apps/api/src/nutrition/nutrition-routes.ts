@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthAdapter } from '../auth/auth-adapter.js';
+import { requireCurrentUser, type AuthAdapter } from '../auth/auth-adapter.js';
 import type { ProfileRepository } from '../profile/profile-repository.js';
 import type { NutritionRepository } from './nutrition-repository.js';
 import {
@@ -64,13 +64,13 @@ export function registerNutritionRoutes(
     if (!parsed.success) return invalid(reply, parsed.error);
     return {
       food: await dependencies.nutrition.createFood(
-        (await dependencies.auth.getCurrentUser()).id,
+        (await requireCurrentUser(dependencies.auth)).id,
         parsed.data,
       ),
     };
   });
   app.get('/v1/foods', async () => {
-    const userId = (await dependencies.auth.getCurrentUser()).id;
+    const userId = (await requireCurrentUser(dependencies.auth)).id;
     return { foods: await dependencies.nutrition.listFoods(userId) };
   });
   app.post('/v1/meals', async (request, reply) => {
@@ -79,7 +79,7 @@ export function registerNutritionRoutes(
     try {
       return {
         meal: await dependencies.nutrition.createMeal(
-          (await dependencies.auth.getCurrentUser()).id,
+          (await requireCurrentUser(dependencies.auth)).id,
           parsed.data,
         ),
       };
@@ -91,7 +91,7 @@ export function registerNutritionRoutes(
   });
   app.get('/v1/meals', async (request, reply) => {
     const query = request.query as { date?: string };
-    const userId = (await dependencies.auth.getCurrentUser()).id;
+    const userId = (await requireCurrentUser(dependencies.auth)).id;
     const profile = await dependencies.profiles.get(userId);
     if (!profile) return reply.code(404).send({ error: 'profile_not_found' });
     const date =
@@ -119,7 +119,7 @@ export function registerNutritionRoutes(
     let meal;
     try {
       meal = await dependencies.nutrition.updateMeal(
-        (await dependencies.auth.getCurrentUser()).id,
+        (await requireCurrentUser(dependencies.auth)).id,
         (request.params as { id: string }).id,
         parsed.data,
       );
@@ -132,7 +132,7 @@ export function registerNutritionRoutes(
   });
   app.delete('/v1/meals/:id', async (request, reply) => {
     const ok = await dependencies.nutrition.deleteMeal(
-      (await dependencies.auth.getCurrentUser()).id,
+      (await requireCurrentUser(dependencies.auth)).id,
       (request.params as { id: string }).id,
     );
     return ok

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthAdapter } from '../auth/auth-adapter.js';
+import { requireCurrentUser, type AuthAdapter } from '../auth/auth-adapter.js';
 import type { StepRepository } from './step-repository.js';
 import { z } from 'zod';
 
@@ -21,7 +21,7 @@ export function registerStepRoutes(
     if (!parsed.success)
       return reply.code(400).send({ error: 'validation_error' });
     const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
-    const userId = (await dependencies.auth.getCurrentUser()).id;
+    const userId = (await requireCurrentUser(dependencies.auth)).id;
     const stored = await dependencies.steps.get(userId, day);
     return {
       day,
@@ -38,7 +38,7 @@ export function registerStepRoutes(
         .code(400)
         .send({ error: 'validation_error', issues: parsed.error.issues });
     const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
-    const userId = (await dependencies.auth.getCurrentUser()).id;
+    const userId = (await requireCurrentUser(dependencies.auth)).id;
     return {
       steps: await dependencies.steps.sync(
         userId,

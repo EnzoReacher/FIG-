@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { DevelopmentAuthAdapter } from './auth/development-auth-adapter.js';
-import type { AuthAdapter } from './auth/auth-adapter.js';
+import { UnauthorizedError, type AuthAdapter } from './auth/auth-adapter.js';
 import { registerProfileRoutes } from './profile/profile-routes.js';
 import type { ProfileRepository } from './profile/profile-repository.js';
 import { registerNutritionRoutes } from './nutrition/nutrition-routes.js';
@@ -18,6 +18,18 @@ export function buildApp(dependencies?: {
   analysis?: FoodAnalysisProvider;
 }) {
   const app = Fastify({ logger: true, bodyLimit: 7 * 1024 * 1024 });
+
+  app.setErrorHandler((error: unknown, _request, reply) => {
+    if (error instanceof UnauthorizedError)
+      return reply.code(401).send({ error: 'unauthorized' });
+    if (
+      error instanceof Error &&
+      'statusCode' in error &&
+      typeof error.statusCode === 'number'
+    )
+      return reply.code(error.statusCode).send({ error: error.name });
+    return reply.code(500).send({ error: 'internal_error' });
+  });
 
   app.get('/health', async () => ({ status: 'ok' as const }));
 
