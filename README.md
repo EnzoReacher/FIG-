@@ -1,6 +1,6 @@
 # Forge Gym Health
 
-Android-first nutrition and activity prototype. This repository is separate from `Forge-Gym-V2`.
+FIG is a web-first beginner gym-coach application and the successor to Forge Gym. Workout coaching is the primary product direction. The repository also contains an earlier mobile nutrition, activity, and food-photo prototype whose valid backend/domain work will be preserved and adapted.
 
 ## Implemented
 
@@ -27,7 +27,7 @@ pnpm lint
 pnpm format:check
 ```
 
-Run the API with `pnpm dev:api` and Expo with `pnpm dev:mobile`. A physical Android device must use the development machine's LAN address in `EXPO_PUBLIC_API_URL`, not `localhost`.
+Run the API with `pnpm dev:api`, the FIG web app with `pnpm dev:web`, and the existing Expo prototype with `pnpm dev:mobile`. A physical Android device must use the development machine's LAN address in `EXPO_PUBLIC_API_URL`, not `localhost`. The web workout slice uses the typed workout API; it stores only the active session ID locally so the server remains canonical after refresh.
 
 ## Android verification still required
 
@@ -47,4 +47,4 @@ Verify activity, camera, and gallery permissions; zero and increasing steps; app
 - Temporary image and analysis-review stores are in process and disappear on restart. There is no production object storage.
 - There is no real vision provider, provider key, hosted infrastructure, background step job, Health Connect, HealthKit, iOS support, or deployment configuration.
 
-See `CURRENT_STATE.md`, `ARCHITECTURE.md`, `ROADMAP.md`, and `docs/VISION_PROVIDER_DECISION.md`.
+See `docs/PRODUCT.md`, `docs/CURRENT_STATE.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/AI_DEVELOPMENT_SYSTEM.md`.

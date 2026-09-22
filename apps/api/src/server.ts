@@ -6,6 +6,7 @@ import { createProfileRepository } from './profile/profile-repository.js';
 import { createNutritionRepository } from './nutrition/nutrition-repository.js';
 import { createStepRepository } from './steps/step-repository.js';
 import { MockFoodAnalysisProvider } from './analysis/analysis-provider.js';
+import { createWorkoutRepository } from './workout/workout-repository.js';
 
 const database = createDatabase();
 const app = buildApp({
@@ -14,6 +15,7 @@ const app = buildApp({
   nutrition: createNutritionRepository(database.db),
   steps: createStepRepository(database.db),
   analysis: new MockFoodAnalysisProvider(),
+  workouts: createWorkoutRepository(database.db),
 });
 const port = Number(process.env.API_PORT ?? 3000);
 

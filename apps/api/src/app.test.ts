@@ -8,6 +8,7 @@ import { createInMemoryProfileRepository } from './profile/profile-repository.js
 import { createInMemoryNutritionRepository } from './nutrition/nutrition-repository.js';
 import { createInMemoryStepRepository } from './steps/step-repository.js';
 import { MockFoodAnalysisProvider } from './analysis/analysis-provider.js';
+import { createInMemoryWorkoutRepository } from './workout/workout-repository.js';
 
 describe('health endpoint', () => {
   it('reports API availability without domain dependencies', async () => {
@@ -35,6 +36,81 @@ describe('health endpoint', () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toHaveProperty('error');
     await app.close();
+  });
+});
+
+describe('workout routes', () => {
+  it('lists, starts, persists set progress, and rejects stale completion', async () => {
+    const workouts = createInMemoryWorkoutRepository();
+    const app = buildApp({ workouts });
+    const listed = await app.inject({ method: 'GET', url: '/v1/workouts' });
+    expect(listed.statusCode).toBe(200);
+    const template = listed.json().workouts[0];
+    const started = await app.inject({
+      method: 'POST',
+      url: '/v1/workout-sessions',
+      payload: { workoutId: template.id },
+    });
+    expect(started.statusCode).toBe(200);
+    const session = started.json().session;
+    const exercise = session.exercises[0];
+    const completed = await app.inject({
+      method: 'POST',
+      url: `/v1/workout-sessions/${session.id}/sets/complete`,
+      payload: {
+        sessionExerciseId: exercise.id,
+        setNumber: 1,
+        revision: 0,
+        requestKey: 'route-set-1',
+      },
+    });
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json().session.revision).toBe(1);
+    const resumed = await app.inject({
+      method: 'GET',
+      url: `/v1/workout-sessions/${session.id}`,
+    });
+    expect(resumed.json().session.exercises[0].sets[0].status).toBe(
+      'completed',
+    );
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/v1/workout-sessions/${session.id}/sets/complete`,
+      payload: {
+        sessionExerciseId: exercise.id,
+        setNumber: 2,
+        revision: 0,
+        requestKey: 'route-set-2',
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    await app.close();
+  });
+
+  it('does not expose a session to another authenticated owner', async () => {
+    const workouts = createInMemoryWorkoutRepository();
+    const first = buildApp({ workouts });
+    const template = (
+      await first.inject({ method: 'GET', url: '/v1/workouts' })
+    ).json().workouts[0];
+    const session = (
+      await first.inject({
+        method: 'POST',
+        url: '/v1/workout-sessions',
+        payload: { workoutId: template.id },
+      })
+    ).json().session;
+    await first.close();
+    const second = buildApp({
+      auth: { getCurrentUser: async () => ({ id: crypto.randomUUID() }) },
+      workouts,
+    });
+    const response = await second.inject({
+      method: 'GET',
+      url: `/v1/workout-sessions/${session.id}`,
+    });
+    expect(response.statusCode).toBe(404);
+    await second.close();
   });
 });
 

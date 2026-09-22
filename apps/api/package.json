@@ -11,6 +11,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@forge/contracts": "workspace:*",
+    "@forge/domain": "workspace:*",
     "@fastify/cors": "^10.0.1",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.36.4",

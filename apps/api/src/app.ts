@@ -9,6 +9,8 @@ import type { StepRepository } from './steps/step-repository.js';
 import { registerStepRoutes } from './steps/step-routes.js';
 import type { FoodAnalysisProvider } from './analysis/analysis-provider.js';
 import { registerAnalysisRoutes } from './analysis/analysis-routes.js';
+import { registerWorkoutRoutes } from './workout/workout-routes.js';
+import type { WorkoutRepository } from './workout/workout-repository.js';
 
 export function buildApp(dependencies?: {
   auth?: AuthAdapter;
@@ -16,6 +18,7 @@ export function buildApp(dependencies?: {
   nutrition?: NutritionRepository;
   steps?: StepRepository;
   analysis?: FoodAnalysisProvider;
+  workouts?: WorkoutRepository;
 }) {
   const app = Fastify({ logger: true, bodyLimit: 7 * 1024 * 1024 });
 
@@ -55,6 +58,11 @@ export function buildApp(dependencies?: {
       auth: dependencies.auth ?? new DevelopmentAuthAdapter(),
       nutrition: dependencies.nutrition,
       provider: dependencies.analysis,
+    });
+  if (dependencies?.workouts)
+    registerWorkoutRoutes(app, {
+      auth: dependencies.auth ?? new DevelopmentAuthAdapter(),
+      workouts: dependencies.workouts,
     });
 
   return app;

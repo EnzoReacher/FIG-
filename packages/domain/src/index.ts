@@ -1,2 +1,2 @@
-// Domain services are introduced with the first vertical slice.
-export {};
+export * from './workout.js';
+export * from './workout.js';

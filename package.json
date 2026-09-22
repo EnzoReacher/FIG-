@@ -4,9 +4,11 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev:api": "pnpm --filter @forge/api dev",
+    "dev:web": "pnpm --filter @forge/web dev",
     "dev:mobile": "pnpm --filter @forge/mobile start",
     "db:generate": "pnpm --filter @forge/api db:generate",
     "db:migrate": "pnpm --filter @forge/api db:migrate",
+    "project:status": "node scripts/project-status.mjs",
     "test": "vitest run",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
